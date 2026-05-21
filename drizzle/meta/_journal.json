@@ -15,6 +15,13 @@
       "when": 1779399232440,
       "tag": "0001_worried_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779400607683,
+      "tag": "0002_dry_ezekiel_stane",
+      "breakpoints": true
     }
   ]
 }

@@ -75,6 +75,11 @@ Auth-related env vars:
 - `SESSION_TTL_DAYS` (default `30`)
 - `OPEN_REGISTRATION` (default `false`)
 
+## Planned workouts + calendar (Milestone 2)
+
+- Create planned workouts at `http://localhost:3000/calendar/new`
+- View them on the month calendar at `http://localhost:3000/calendar`
+
 ## Health endpoint
 
 Public endpoint:
