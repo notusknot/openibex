@@ -4,6 +4,8 @@ services:
     container_name: openibex
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       - PORT=3000
       - OPENIBEX_ENV=production
@@ -12,6 +14,9 @@ services:
       - OPENIBEX_DATA_DIR=/data
       - OPENIBEX_UPLOAD_DIR=/data/uploads
       - OPENIBEX_STREAM_DIR=/data/streams
+      - OPEN_REGISTRATION=${OPEN_REGISTRATION:-false}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - SESSION_TTL_DAYS=${SESSION_TTL_DAYS:-30}
     volumes:
       - ./data:/data
     restart: unless-stopped

@@ -2,9 +2,9 @@
 
 A self-hosted training platform for endurance athletes.
 
-Milestone 0 status: greenfield scaffold (SvelteKit + SQLite + Drizzle) with a public health endpoint.
+Milestone 1 status: local email/password auth, protected app shell, and profile editing.
 
-## Tech stack (Milestone 0)
+## Tech stack
 
 - SvelteKit + TypeScript (`@sveltejs/adapter-node`)
 - SQLite-first (`/data/openibex.db`)
@@ -18,7 +18,9 @@ Milestone 0 status: greenfield scaffold (SvelteKit + SQLite + Drizzle) with a pu
 
 ```bash
 direnv allow
+cp .env.example .env
 pnpm install
+pnpm db:migrate
 pnpm dev
 ```
 
@@ -33,6 +35,7 @@ Requirements:
 ```bash
 cp .env.example .env
 pnpm install
+pnpm db:migrate
 pnpm dev
 ```
 
@@ -40,6 +43,12 @@ If `/api/health` 500s with a `better-sqlite3` “Could not locate the bindings f
 
 ```bash
 pnpm rebuild better-sqlite3
+```
+
+## Tests
+
+```bash
+pnpm test
 ```
 
 ## Database and migrations
@@ -52,6 +61,19 @@ Common commands:
 pnpm db:generate
 pnpm db:migrate
 ```
+
+Migrations are also applied automatically on server startup (so the container can self-initialize), but `pnpm db:migrate` is still the recommended workflow during development.
+
+## Authentication (Milestone 1)
+
+- Visit `http://localhost:3000/register` to create the first account (first user becomes `admin`).
+- After the first user, registration is disabled by default unless `OPEN_REGISTRATION=true`.
+
+Auth-related env vars:
+
+- `SESSION_SECRET` (required in production, 16+ chars; use a long random value)
+- `SESSION_TTL_DAYS` (default `30`)
+- `OPEN_REGISTRATION` (default `false`)
 
 ## Health endpoint
 
@@ -71,13 +93,27 @@ Expected response:
 
 ```bash
 cp .env.example .env
+# Edit .env and set SESSION_SECRET before running in production.
 docker compose up -d --build
 curl -s http://localhost:3000/api/health
 ```
 
 Data lives in `./data` on the host and is mounted to `/data` in the container.
 
+## Reset local dev data
+
+Stop the app, then remove the SQLite database file:
+
+```bash
+rm -f ./data/openibex.db ./data/openibex.db-*
+```
+
+## Security/deployment notes
+
+- Set a strong `SESSION_SECRET` and run behind HTTPS in production.
+- Back up the host `./data` directory (Docker bind mount persists `/data`).
+
 ## Notes
 
-- Milestone 0 intentionally does **not** implement auth, uploads/import, activities, analytics, or coach features yet.
+- Milestone 1 intentionally does **not** implement activity upload/import, activities, analytics, planned workouts, or coach workflows yet.
 - The codebase is structured so that routes call services, services call repositories, and repositories are the only layer that touches Drizzle/SQLite (to preserve the future “Go API later” path).

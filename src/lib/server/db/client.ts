@@ -7,8 +7,10 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { getEnv } from '$lib/server/env';
 import { sqlitePathFromDatabaseUrl } from '$lib/server/db/sqlitePath';
 import * as schema from '$lib/server/db/schema';
+import { ensureMigrations, resetMigrationsForTests } from '$lib/server/db/migrations';
 
 let db: BetterSQLite3Database<typeof schema> | null = null;
+let sqlite: Database.Database | null = null;
 
 function ensureDirs() {
 	const env = getEnv();
@@ -26,7 +28,19 @@ export function getDb() {
 	const sqlitePath = sqlitePathFromDatabaseUrl(env.DATABASE_URL);
 	fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
 
-	const sqlite = new Database(sqlitePath);
+	sqlite = new Database(sqlitePath);
+	sqlite.pragma('journal_mode = WAL');
+	sqlite.pragma('foreign_keys = ON');
 	db = drizzle(sqlite, { schema });
+	ensureMigrations(db);
 	return db;
+}
+
+export function resetDbForTests(): void {
+	if (sqlite) {
+		sqlite.close();
+	}
+	sqlite = null;
+	db = null;
+	resetMigrationsForTests();
 }
