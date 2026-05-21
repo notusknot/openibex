@@ -1,0 +1,17 @@
+services:
+  openibex:
+    build: .
+    container_name: openibex
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - OPENIBEX_ENV=production
+      - NODE_ENV=production
+      - DATABASE_URL=file:/data/openibex.db
+      - OPENIBEX_DATA_DIR=/data
+      - OPENIBEX_UPLOAD_DIR=/data/uploads
+      - OPENIBEX_STREAM_DIR=/data/streams
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

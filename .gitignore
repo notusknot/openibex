@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+.envrc
+.direnv/
+.svelte-kit/
+build/
+node_modules/
+
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+*.log
+.DS_Store
