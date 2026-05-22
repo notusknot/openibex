@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { handle } from '../hooks.server';
+import { handle } from './hooks.server';
 import { resetDbForTests } from '$lib/server/db/client';
 import { registerWithEmailPassword, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
 

@@ -17,6 +17,7 @@ function ensureDirs() {
 	fs.mkdirSync(env.OPENIBEX_DATA_DIR, { recursive: true });
 	fs.mkdirSync(env.OPENIBEX_UPLOAD_DIR, { recursive: true });
 	fs.mkdirSync(env.OPENIBEX_STREAM_DIR, { recursive: true });
+	fs.mkdirSync(env.OPENIBEX_EXPORT_DIR, { recursive: true });
 }
 
 export function getDb() {

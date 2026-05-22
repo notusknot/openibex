@@ -2,7 +2,16 @@ import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
 
-const PUBLIC_PREFIXES = ['/api/health', '/_app', '/favicon', '/robots.txt'];
+const PUBLIC_PREFIXES = [
+	'/api/health',
+	'/_app',
+	'/favicon',
+	'/robots.txt',
+	// Vite dev client assets
+	'/@vite',
+	'/@id',
+	'/__vite_ping'
+];
 const PUBLIC_PATHS = ['/', '/login', '/register', '/logout'];
 
 function isPublicPath(pathname: string): boolean {
@@ -43,5 +52,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		throw redirect(303, '/login');
 	}
 
-	return resolve(event);
+	const response = await resolve(event);
+	// Basic hardening headers (safe defaults for a self-hosted app).
+	response.headers.set('x-content-type-options', 'nosniff');
+	response.headers.set('referrer-policy', 'same-origin');
+	response.headers.set('x-frame-options', 'DENY');
+	response.headers.set('permissions-policy', 'geolocation=(), microphone=(), camera=()');
+	return response;
 };

@@ -12,8 +12,16 @@
 			plannedDistanceM: number | null;
 			plannedLoad: number | null;
 		};
+		link: { matchType: string; durationCompliance: number | null; distanceCompliance: number | null; loadCompliance: number | null } | null;
+		matchedActivity: { id: string; title: string; startTime: Date } | null;
+		candidates: Array<{ id: string; title: string; startTime: Date }>;
 	};
 	export let form: { error?: string; success?: boolean } | null;
+
+	function pct(v: number | null) {
+		if (v === null) return '—';
+		return `${Math.round(v * 100)}%`;
+	}
 </script>
 
 <h1>Edit planned workout</h1>
@@ -84,6 +92,46 @@
 	</div>
 </form>
 
+<h2>Match to completed activity</h2>
+{#if data.link && data.matchedActivity}
+	<div class="card">
+		<p>
+			Linked (<strong>{data.link.matchType}</strong>) to
+			<a href={`/activities/${data.matchedActivity.id}`}>{data.matchedActivity.title}</a>
+			({new Date(data.matchedActivity.startTime).toLocaleString()}).
+		</p>
+		<p class="muted">
+			Compliance: duration {pct(data.link.durationCompliance)}, distance {pct(data.link.distanceCompliance)}, load
+			{pct(data.link.loadCompliance)}
+		</p>
+		<form method="POST" action="?/unlink">
+			<button type="submit" class="dangerButton">Unlink</button>
+		</form>
+	</div>
+{:else}
+	<p class="muted">No match yet. Pick an activity on the same date/sport to link manually.</p>
+{/if}
+
+<form method="POST" action="?/link" class="card">
+	<label>
+		<span>Activity</span>
+		<select name="activityId" required>
+			<option value="" selected>Select…</option>
+			{#each data.candidates as a}
+				<option value={a.id}>
+					{a.title} — {new Date(a.startTime).toLocaleTimeString()}
+				</option>
+			{/each}
+		</select>
+	</label>
+	{#if data.candidates.length === 0}
+		<p class="muted">
+			No completed activities found for this date and sport. Upload an activity or adjust the planned workout date/sport.
+		</p>
+	{/if}
+	<button type="submit">Link</button>
+</form>
+
 <form method="POST" action="?/delete" class="danger">
 	<button type="submit" class="dangerButton">Delete</button>
 </form>
@@ -137,6 +185,10 @@
 
 	.link {
 		color: #334155;
+	}
+
+	.muted {
+		color: #64748b;
 	}
 
 	.error {

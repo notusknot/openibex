@@ -2,7 +2,7 @@
 
 A self-hosted training platform for endurance athletes.
 
-Milestone 1 status: local email/password auth, protected app shell, and profile editing.
+This repo currently implements Milestones 0–6 from `openibex_sveltekit_prd.md` (auth, planning, FIT import, calendar matching, analytics, and data export).
 
 ## Tech stack
 
@@ -11,6 +11,36 @@ Milestone 1 status: local email/password auth, protected app shell, and profile 
 - Drizzle ORM + Drizzle Kit migrations
 - pnpm
 - Single-container Docker Compose deployment (bind-mount `./data` to `/data`)
+
+## Quickstart (Docker Compose)
+
+```bash
+cp .env.example .env
+```
+
+Set a strong `SESSION_SECRET` (required in production):
+
+```bash
+python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+```
+
+Paste that value into `.env` as `SESSION_SECRET=...`.
+
+Then run:
+
+```bash
+docker compose up -d --build
+curl -s http://localhost:3000/api/health
+```
+
+Open the app:
+
+- `http://localhost:3000/register` (first user becomes `admin`)
+
+If you want to allow multiple users, set `OPEN_REGISTRATION=true` in `.env` (default is `false`).
 
 ## Local development
 
@@ -80,6 +110,34 @@ Auth-related env vars:
 - Create planned workouts at `http://localhost:3000/calendar/new`
 - View them on the month calendar at `http://localhost:3000/calendar`
 
+## FIT upload + activities (Milestone 3)
+
+- Upload a FIT file at `http://localhost:3000/activities/upload`
+- View activities at `http://localhost:3000/activities`
+- Download the original uploaded file from an activity detail page
+
+On disk (Docker bind-mount `./data` to `/data`):
+
+- Raw uploads: `./data/uploads/<userId>/<sha256>.fit`
+- Stream blobs: `./data/streams/<activityId>.json.gz`
+
+## Calendar matching (Milestone 4)
+
+- The calendar shows both planned workouts and completed activities.
+- Auto-matching links planned+completed by date and sport (one-to-one).
+- Manual link/unlink is available from the planned workout edit page.
+
+## Analytics (Milestone 5)
+
+- Analytics UI: `http://localhost:3000/analytics`
+- JSON endpoint: `http://localhost:3000/api/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- Formulas: `docs/analytics.md`
+
+## Data export + backup (Milestone 6)
+
+- Generate an export at `http://localhost:3000/settings/export`
+- Back up and restore: `docs/self-hosting.md`
+
 ## Health endpoint
 
 Public endpoint:
@@ -120,5 +178,5 @@ rm -f ./data/openibex.db ./data/openibex.db-*
 
 ## Notes
 
-- Milestone 1 intentionally does **not** implement activity upload/import, activities, analytics, planned workouts, or coach workflows yet.
+- OpenIbex intentionally does **not** implement GPX/TCX import, external integrations, OAuth, or coach workflows yet.
 - The codebase is structured so that routes call services, services call repositories, and repositories are the only layer that touches Drizzle/SQLite (to preserve the future “Go API later” path).

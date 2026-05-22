@@ -34,6 +34,7 @@ export async function verifyPassword(password: string, stored: PasswordHash): Pr
 	if (parts.length !== 6) return false;
 	const [scheme, nRaw, rRaw, pRaw, saltB64, keyB64] = parts;
 	if (scheme !== 'scrypt') return false;
+	if (!saltB64 || !keyB64) return false;
 
 	const N = Number(nRaw);
 	const r = Number(rRaw);
@@ -52,4 +53,3 @@ export async function verifyPassword(password: string, stored: PasswordHash): Pr
 
 	return timingSafeEqual(actual, expected);
 }
-

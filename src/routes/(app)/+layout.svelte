@@ -6,14 +6,16 @@
 </script>
 
 <div class="appShell">
+	<a class="skip" href="#main">Skip to content</a>
 	<header class="header">
 		<div class="left">
 			<a class="brand" href="/dashboard">{title}</a>
-			<nav class="nav">
+			<nav class="nav" aria-label="Primary">
 				<a href="/dashboard">Dashboard</a>
 				<a href="/calendar">Calendar</a>
 				<a href="/activities">Activities</a>
-				<a href="/settings/profile">Settings</a>
+				<a href="/analytics">Analytics</a>
+				<a href="/settings">Settings</a>
 			</nav>
 		</div>
 		<div class="right">
@@ -24,7 +26,7 @@
 		</div>
 	</header>
 
-	<main class="main">
+	<main class="main" id="main" tabindex="-1">
 		<slot />
 	</main>
 </div>
@@ -34,6 +36,20 @@
 		min-height: 100vh;
 		display: grid;
 		grid-template-rows: auto 1fr;
+	}
+
+	.skip {
+		position: absolute;
+		left: -999px;
+		top: 8px;
+		background: white;
+		border: 1px solid #cbd5e1;
+		border-radius: 10px;
+		padding: 8px 10px;
+	}
+	.skip:focus {
+		left: 8px;
+		z-index: 10;
 	}
 
 	.header {

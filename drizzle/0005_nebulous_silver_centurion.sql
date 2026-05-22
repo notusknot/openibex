@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `workout_links_user_activity_unique` ON `workout_links` (`user_id`,`activity_id`);

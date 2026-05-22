@@ -7,12 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
   python3 make g++ \\
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json ./
+COPY package.json pnpm-lock.yaml ./
 
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
-# Install dependencies (will use pnpm via corepack)
-RUN pnpm install --frozen-lockfile=false
+# Install dependencies
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 

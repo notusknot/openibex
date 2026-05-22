@@ -10,4 +10,9 @@
 	:global(a) {
 		color: inherit;
 	}
+
+	:global(:focus-visible) {
+		outline: 2px solid #2563eb;
+		outline-offset: 2px;
+	}
 </style>
