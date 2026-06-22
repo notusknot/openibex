@@ -1,0 +1,86 @@
+:root {
+	color-scheme: light;
+
+	--oi-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--oi-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+	--oi-font-size-xs: 0.75rem;
+	--oi-font-size-sm: 0.875rem;
+	--oi-font-size-md: 1rem;
+	--oi-font-size-lg: 1.125rem;
+	--oi-font-size-xl: 1.375rem;
+	--oi-font-size-2xl: 1.75rem;
+
+	--oi-space-1: 0.25rem;
+	--oi-space-2: 0.5rem;
+	--oi-space-3: 0.75rem;
+	--oi-space-4: 1rem;
+	--oi-space-5: 1.25rem;
+	--oi-space-6: 1.5rem;
+	--oi-space-8: 2rem;
+
+	--oi-radius-sm: 4px;
+	--oi-radius-md: 6px;
+	--oi-radius-lg: 8px;
+	--oi-radius-pill: 999px;
+
+	--oi-color-bg: #f6f8fb;
+	--oi-color-surface: #ffffff;
+	--oi-color-surface-muted: #eef3f8;
+	--oi-color-surface-raised: #ffffff;
+	--oi-color-text: #101827;
+	--oi-color-text-muted: #526174;
+	--oi-color-text-subtle: #6c7a8d;
+	--oi-color-border: #d8e0ea;
+	--oi-color-border-strong: #b7c4d4;
+
+	--oi-color-brand: #1f6feb;
+	--oi-color-brand-strong: #184fb8;
+	--oi-color-accent: #d97706;
+	--oi-color-info: #0f74b8;
+	--oi-color-success: #0f8a62;
+	--oi-color-warning: #b7791f;
+	--oi-color-danger: #b42318;
+
+	--oi-sport-bike: #2f80ed;
+	--oi-sport-run: #f97316;
+	--oi-sport-swim: #06b6d4;
+	--oi-sport-strength: #8b5cf6;
+	--oi-sport-other: #64748b;
+
+	--oi-compliance-under: #d97706;
+	--oi-compliance-close: #0f8a62;
+	--oi-compliance-over: #0f74b8;
+
+	--oi-shadow-sm: 0 1px 2px rgb(16 24 39 / 0.08), 0 8px 24px rgb(16 24 39 / 0.06);
+	--oi-focus-ring: 0 0 0 3px rgb(31 111 235 / 0.24);
+}
+
+[data-theme='dark'] {
+	color-scheme: dark;
+
+	--oi-color-bg: #070b12;
+	--oi-color-surface: #0d1420;
+	--oi-color-surface-muted: #111c2b;
+	--oi-color-surface-raised: #131f2f;
+	--oi-color-text: #e7edf6;
+	--oi-color-text-muted: #9aa8ba;
+	--oi-color-text-subtle: #7f8da1;
+	--oi-color-border: #263548;
+	--oi-color-border-strong: #3a4d65;
+
+	--oi-color-brand: #4f8cff;
+	--oi-color-brand-strong: #82b1ff;
+	--oi-color-accent: #f6b44b;
+	--oi-color-info: #58c7ff;
+	--oi-color-success: #47d18c;
+	--oi-color-warning: #f7c948;
+	--oi-color-danger: #ff6b64;
+
+	--oi-compliance-under: #f6b44b;
+	--oi-compliance-close: #47d18c;
+	--oi-compliance-over: #58c7ff;
+
+	--oi-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 28px rgb(0 0 0 / 0.28);
+	--oi-focus-ring: 0 0 0 3px rgb(79 140 255 / 0.32);
+}
