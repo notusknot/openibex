@@ -6,6 +6,7 @@ export type OpenIbexEnv = {
 	OPENIBEX_UPLOAD_DIR: string;
 	OPENIBEX_STREAM_DIR: string;
 	OPENIBEX_EXPORT_DIR: string;
+	OPENIBEX_IMPORT_DIR: string;
 	OPENIBEX_ENV: string;
 	NODE_ENV: string;
 	OPEN_REGISTRATION: boolean;
@@ -37,6 +38,7 @@ export function getEnv(): OpenIbexEnv {
 		OPENIBEX_UPLOAD_DIR: readEnv('OPENIBEX_UPLOAD_DIR') ?? path.join(dataDir, 'uploads'),
 		OPENIBEX_STREAM_DIR: readEnv('OPENIBEX_STREAM_DIR') ?? path.join(dataDir, 'streams'),
 		OPENIBEX_EXPORT_DIR: readEnv('OPENIBEX_EXPORT_DIR') ?? path.join(dataDir, 'exports'),
+		OPENIBEX_IMPORT_DIR: readEnv('OPENIBEX_IMPORT_DIR') ?? path.join(dataDir, 'imports'),
 		OPENIBEX_ENV: readEnv('OPENIBEX_ENV') ?? 'development',
 		NODE_ENV: readEnv('NODE_ENV') ?? 'development',
 		OPEN_REGISTRATION: openRegistration,

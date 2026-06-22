@@ -14,6 +14,7 @@
 				<a href="/dashboard">Dashboard</a>
 				<a href="/calendar">Calendar</a>
 				<a href="/activities">Activities</a>
+				<a href="/imports">Imports</a>
 				<a href="/analytics">Analytics</a>
 				<a href="/settings">Settings</a>
 			</nav>

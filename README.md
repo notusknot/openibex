@@ -2,7 +2,7 @@
 
 A self-hosted training platform for endurance athletes.
 
-This repo currently implements Milestones 0–6 from `openibex_sveltekit_prd.md` (auth, planning, FIT import, calendar matching, analytics, and data export).
+This repo currently implements v0.1 from `openibex_sveltekit_prd.md` (auth, planning, FIT import, calendar matching, analytics, data export, and release hardening), plus Garmin historical bulk import tooling.
 
 ## Tech stack
 
@@ -79,6 +79,7 @@ pnpm rebuild better-sqlite3
 
 ```bash
 pnpm test
+pnpm check
 ```
 
 ## Database and migrations
@@ -137,6 +138,61 @@ On disk (Docker bind-mount `./data` to `/data`):
 
 - Generate an export at `http://localhost:3000/settings/export`
 - Back up and restore: `docs/self-hosting.md`
+
+## Garmin historical bulk import (local filesystem)
+
+OpenIbex can import FIT files from a **Garmin account data export** you have already downloaded (no Garmin API, no credentials).
+
+### 1) Request and download the export
+
+In your Garmin account settings, request the full data export and download it when it’s ready. Extract the archive on disk.
+
+### 2) Locate uploaded activity files
+
+Inside the extracted export, activity files are typically under:
+
+- `DI_CONNECT/DI-Connect-Fitness-Uploaded-Files/`
+
+OpenIbex will also scan the directory you pass and try to locate that folder automatically.
+
+### 3) Run the importer
+
+Run locally (recommended):
+
+```bash
+pnpm db:migrate
+pnpm import:garmin -- --user you@example.com --path /path/to/extracted/garmin-export
+```
+
+The importer:
+
+- Recursively finds `.fit/.FIT` files (and `.zip` archives, including nested zips)
+- Computes SHA-256 and skips duplicates safely
+- Stores originals under `./data/imports/<batch_id>/originals/<sha256>.fit`
+- Creates activities and stores parsed streams under `./data/streams/<activityId>.json.gz`
+- Records failures per-file without stopping the whole batch
+
+### 4) View results
+
+- Import history: `http://localhost:3000/imports`
+- Batch detail + failures: `http://localhost:3000/imports/<batch_id>`
+
+### Analytics cache rebuild (optional)
+
+Current analytics pages compute directly from the `activities` table, so imported activities appear immediately. If you want to rebuild the optional `daily_metrics` cache table:
+
+```bash
+pnpm analytics:rebuild -- --user you@example.com
+```
+
+### Reruns and safety
+
+The import is safe to run multiple times against the same export directory:
+
+- Exact file duplicates are detected by SHA-256.
+- Existing activities are not duplicated.
+
+Before a large bulk import, it’s still recommended to back up `./data` (bind-mounted to `/data` in Docker).
 
 ## Health endpoint
 

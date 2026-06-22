@@ -15,6 +15,7 @@ services:
       - OPENIBEX_UPLOAD_DIR=/data/uploads
       - OPENIBEX_STREAM_DIR=/data/streams
       - OPENIBEX_EXPORT_DIR=/data/exports
+      - OPENIBEX_IMPORT_DIR=/data/imports
       - OPEN_REGISTRATION=${OPEN_REGISTRATION:-false}
       - SESSION_SECRET=${SESSION_SECRET}
       - SESSION_TTL_DAYS=${SESSION_TTL_DAYS:-30}

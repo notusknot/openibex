@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { activities, type Sport } from '$lib/server/db/schema';
 
@@ -8,6 +8,11 @@ export async function createActivity(input: {
 	id: string;
 	userId: string;
 	activityFileId: string | null;
+	source?: string | null;
+	sourceActivityId?: string | null;
+	sourceFileSha256?: string | null;
+	sourceFilename?: string | null;
+	importedAt?: Date | null;
 	sport: Sport;
 	title: string;
 	description?: string | null;
@@ -35,6 +40,11 @@ export async function createActivity(input: {
 			id: input.id,
 			userId: input.userId,
 			activityFileId: input.activityFileId,
+			source: input.source ?? null,
+			sourceActivityId: input.sourceActivityId ?? null,
+			sourceFileSha256: input.sourceFileSha256 ?? null,
+			sourceFilename: input.sourceFilename ?? null,
+			importedAt: input.importedAt ?? null,
 			sport: input.sport,
 			title: input.title,
 			description: input.description ?? null,
@@ -69,6 +79,59 @@ export async function getActivityByIdForUser(id: string, userId: string): Promis
 		.get();
 }
 
+export async function getActivityBySourceFileShaForUser(input: {
+	userId: string;
+	sha256: string;
+}): Promise<DbActivity | undefined> {
+	const db = getDb();
+	return db
+		.select()
+		.from(activities)
+		.where(and(eq(activities.userId, input.userId), eq(activities.sourceFileSha256, input.sha256)))
+		.get();
+}
+
+export async function getActivityBySourceActivityIdForUser(input: {
+	userId: string;
+	source: string;
+	sourceActivityId: string;
+}): Promise<DbActivity | undefined> {
+	const db = getDb();
+	return db
+		.select()
+		.from(activities)
+		.where(
+			and(
+				eq(activities.userId, input.userId),
+				eq(activities.source, input.source),
+				eq(activities.sourceActivityId, input.sourceActivityId)
+			)
+		)
+		.get();
+}
+
+export async function getActivityByFingerprintForUser(input: {
+	userId: string;
+	sport: Sport;
+	startTime: Date;
+	durationSec: number | null;
+	distanceM: number | null;
+}): Promise<DbActivity | undefined> {
+	const db = getDb();
+	const where = [
+		eq(activities.userId, input.userId),
+		eq(activities.sport, input.sport),
+		eq(activities.startTime, input.startTime)
+	];
+	where.push(input.durationSec === null ? isNull(activities.durationSec) : eq(activities.durationSec, input.durationSec));
+	where.push(input.distanceM === null ? isNull(activities.distanceM) : eq(activities.distanceM, input.distanceM));
+	return db
+		.select()
+		.from(activities)
+		.where(and(...where))
+		.get();
+}
+
 export async function listRecentActivitiesForUser(userId: string, limit: number): Promise<DbActivity[]> {
 	const db = getDb();
 	return db
@@ -78,6 +141,11 @@ export async function listRecentActivitiesForUser(userId: string, limit: number)
 		.orderBy(desc(activities.startTime))
 		.limit(limit)
 		.all();
+}
+
+export async function listAllActivitiesForUser(userId: string): Promise<DbActivity[]> {
+	const db = getDb();
+	return db.select().from(activities).where(eq(activities.userId, userId)).all();
 }
 
 export async function listActivitiesForUserInTimeRange(input: {
