@@ -8,12 +8,23 @@ Token source: `src/lib/styles/tokens.css`.
 
 Initial primitives:
 
+- `src/lib/components/ui/AppShell.svelte`
+- `src/lib/components/ui/PrimaryNav.svelte`
+- `src/lib/components/ui/TopBar.svelte`
 - `src/lib/components/ui/PageHeader.svelte`
 - `src/lib/components/ui/Panel.svelte`
 - `src/lib/components/ui/EmptyState.svelte`
 - `src/lib/components/ui/StatusBadge.svelte`
+- `src/lib/components/ui/Button.svelte`
+- `src/lib/components/ui/Input.svelte`
+- `src/lib/components/ui/Select.svelte`
+- `src/lib/components/ui/Textarea.svelte`
+- `src/lib/components/ui/Alert.svelte`
+- `src/lib/components/ui/StatCard.svelte`
+- `src/lib/components/ui/LoadingState.svelte`
+- `src/lib/components/ui/SectionHeader.svelte`
 
-These primitives are not yet wired through the app. Milestone 9 should adopt them in the authenticated shell and shared page layout.
+Milestone 9 wired these primitives through the authenticated shell, public auth pages, and core page layouts. Detailed dashboard, calendar, activity, and analytics redesign remains reserved for Milestone 10.
 
 ## Color Palette
 
@@ -138,15 +149,27 @@ Elevation:
 
 ## Layout
 
-Recommended authenticated layout for Milestone 9:
+Implemented authenticated layout:
 
-- Left navigation rail on desktop or compact top/side hybrid.
+- Left navigation rail on desktop.
+- Compact sticky top header plus horizontal primary navigation on mobile/tablet.
+- Active route highlighting via `aria-current="page"`.
+- Visible skip link and keyboard focus states.
 - Calendar and work surfaces should use more horizontal space than the current 960px shell when screen width allows.
 - Content max width should vary by page type:
   - Calendar, analytics, import tables: wide.
   - Forms and settings detail: narrow.
   - Activity detail: medium/wide with metric grids.
-- Mobile navigation should remain usable without hiding primary routes behind unclear controls.
+- Mobile navigation remains visible and horizontally scrollable rather than hidden behind a menu.
+
+## Dark Mode Behavior
+
+Dark mode is token-based and minimal:
+
+- The app follows `prefers-color-scheme: dark` by default.
+- `[data-theme='dark']` and `[data-theme='light']` hooks exist for a future explicit setting.
+- No database-backed theme preference exists in Milestone 9.
+- Components use tokens so later theme work should not require page rewrites.
 
 ## Components
 
