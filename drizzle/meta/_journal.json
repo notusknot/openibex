@@ -78,6 +78,13 @@
       "when": 1782235260079,
       "tag": "0010_equal_alex_power",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1782237891426,
+      "tag": "0011_public_victor_mancha",
+      "breakpoints": true
     }
   ]
 }

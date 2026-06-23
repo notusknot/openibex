@@ -121,6 +121,16 @@ export const actions: Actions = {
 		if (result.outcome === 'auth_failed') {
 			return fail(400, { garminError: 'Garmin session expired or is invalid. Reconnect your account.' });
 		}
+		if (result.outcome === 'rate_limited') {
+			return fail(429, {
+				garminError: 'Garmin is rate-limiting requests — sync is cooling down. Try again later.'
+			});
+		}
+		if (result.outcome === 'skipped') {
+			return fail(409, {
+				garminError: 'A sync is already running or cooling down — try again shortly.'
+			});
+		}
 		if (result.outcome === 'error') {
 			return fail(400, { garminError: `Sync failed: ${result.error ?? 'unknown error'}` });
 		}

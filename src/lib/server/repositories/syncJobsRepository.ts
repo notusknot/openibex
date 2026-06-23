@@ -12,6 +12,30 @@ export type DbSyncJob = typeof syncJobs.$inferSelect;
 export const SYNC_THROTTLE_MS = 15 * 60 * 1000;
 export const SYNC_LOCK_TTL_MS = 10 * 60 * 1000;
 
+// Circuit breaker: after a failed run, hold off before retrying — a tight retry
+// loop against the unofficial Garmin API can get the account banned. Generic
+// errors back off from the throttle window; rate-limit (429) responses back off
+// much harder, and that cool-down is honored even by a manual "Sync now".
+export const SYNC_ERROR_BACKOFF_BASE_MS = 15 * 60 * 1000; // 15 min
+export const SYNC_ERROR_BACKOFF_CAP_MS = 6 * 60 * 60 * 1000; // 6 h
+export const SYNC_RATE_LIMIT_BACKOFF_BASE_MS = 60 * 60 * 1000; // 1 h
+export const SYNC_RATE_LIMIT_BACKOFF_CAP_MS = 24 * 60 * 60 * 1000; // 24 h
+
+/** The release status that triggers the hard (manual-proof) cool-down. */
+export const RATE_LIMITED_STATUS = 'rate_limited';
+
+/** Exponential backoff for the breaker: base * 2^(n-1), capped. Pure + exported
+ * for unit testing. */
+export function computeBackoffMs(consecutiveFailures: number, status: string): number {
+	const n = Math.max(1, consecutiveFailures);
+	const rateLimited = status === RATE_LIMITED_STATUS;
+	const base = rateLimited ? SYNC_RATE_LIMIT_BACKOFF_BASE_MS : SYNC_ERROR_BACKOFF_BASE_MS;
+	const cap = rateLimited ? SYNC_RATE_LIMIT_BACKOFF_CAP_MS : SYNC_ERROR_BACKOFF_CAP_MS;
+	// Clamp the exponent so base * 2^(n-1) can't overflow before hitting the cap.
+	const factor = 2 ** Math.min(n - 1, 30);
+	return Math.min(base * factor, cap);
+}
+
 // Stable per-process id, recorded on the lock for debugging which instance holds
 // it. Randomized suffix distinguishes restarts of the same pid.
 const INSTANCE_ID = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
@@ -51,6 +75,16 @@ export function tryAcquireSyncJob(userId: string, opts: AcquireOptions = {}): bo
 		const lockIsLive = row.status === 'running' && lockedAtMs !== null && now - lockedAtMs < lockTtlMs;
 		if (lockIsLive) return false; // someone else is actively syncing
 
+		// Circuit breaker: respect an open cool-down. A rate-limit cool-down is
+		// "hard" — honored even by a manual run, to avoid hammering a 429'd API
+		// into an account ban. An ordinary error cool-down only gates auto-sync;
+		// a manual "Sync now" may retry through it.
+		const cooldownMs = row.cooldownUntil ? row.cooldownUntil.getTime() : null;
+		if (cooldownMs !== null && now < cooldownMs) {
+			const hardCooldown = row.lastStatus === RATE_LIMITED_STATUS;
+			if (hardCooldown || !opts.ignoreThrottle) return false;
+		}
+
 		const lastRunMs = row.lastRunAt ? row.lastRunAt.getTime() : null;
 		const throttled = !opts.ignoreThrottle && lastRunMs !== null && now - lastRunMs < throttleMs;
 		if (throttled) return false;
@@ -72,9 +106,15 @@ export type SyncJobRelease = {
 	error?: string | null;
 };
 
-/** Release the lock and record the run result (sets the throttle timestamp). */
+/** Release the lock and record the run result. On success the breaker resets; on
+ * failure it increments the failure count and opens an (escalating) cool-down. */
 export function releaseSyncJob(userId: string, result: SyncJobRelease, now: number = Date.now()): void {
 	const db = getDb();
+	const prev = db.select().from(syncJobs).where(eq(syncJobs.userId, userId)).get();
+	const consecutiveFailures = result.ok ? 0 : (prev?.consecutiveFailures ?? 0) + 1;
+	const cooldownUntil = result.ok
+		? null
+		: new Date(now + computeBackoffMs(consecutiveFailures, result.status));
 	db.update(syncJobs)
 		.set({
 			status: result.ok ? 'idle' : 'failed',
@@ -82,7 +122,9 @@ export function releaseSyncJob(userId: string, result: SyncJobRelease, now: numb
 			lockedBy: null,
 			lastRunAt: new Date(now),
 			lastStatus: result.status,
-			lastError: result.error ?? null
+			lastError: result.error ?? null,
+			consecutiveFailures,
+			cooldownUntil
 		})
 		.where(eq(syncJobs.userId, userId))
 		.run();

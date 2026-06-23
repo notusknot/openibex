@@ -43,7 +43,14 @@ const INITIAL_LIMIT = 30;
 const PAGE_SIZE = 20;
 const MAX_PAGES = 10; // hard safety cap: at most 200 activities enumerated per run
 
-export type SyncOutcome = 'ok' | 'auth_failed' | 'error' | 'skipped' | 'disabled' | 'no_credential';
+export type SyncOutcome =
+	| 'ok'
+	| 'auth_failed'
+	| 'rate_limited'
+	| 'error'
+	| 'skipped'
+	| 'disabled'
+	| 'no_credential';
 
 export type SyncResult = {
 	outcome: SyncOutcome;
@@ -113,6 +120,10 @@ export function selectActivitiesToImport(
 
 function isAuthError(message: string): boolean {
 	return /\b401\b|unauthor|forbidden|invalid.?token|login|ticket|expired/i.test(message);
+}
+
+function isRateLimitError(message: string): boolean {
+	return /\b429\b|too many requests|rate.?limit/i.test(message);
 }
 
 function sha256Hex(bytes: Uint8Array): string {
@@ -365,8 +376,16 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 		return { outcome: 'ok', imported, duplicate, unsupported, failed, batchId };
 	} catch (err) {
 		const message = redactGarminError(err);
-		const outcome: SyncOutcome = isAuthError(message) ? 'auth_failed' : 'error';
-		await updateGarminSyncStatus({ userId, lastSyncStatus: outcome, lastSyncError: message });
+		const outcome: SyncOutcome = isAuthError(message)
+			? 'auth_failed'
+			: isRateLimitError(message)
+				? 'rate_limited'
+				: 'error';
+		// garmin_credentials.lastSyncStatus is a 3-value enum (ok|auth_failed|
+		// error); fold rate_limited into 'error' there. The sync_jobs row keeps
+		// the precise status — it drives the breaker's hard vs soft cool-down.
+		const credStatus = outcome === 'auth_failed' ? 'auth_failed' : 'error';
+		await updateGarminSyncStatus({ userId, lastSyncStatus: credStatus, lastSyncError: message });
 		await updateImportBatchProgress({ id: batchId, userId, status: 'failed', completedAt: new Date() }).catch(() => {});
 		release = { ok: false, status: outcome, error: message };
 		return { outcome, imported, duplicate, unsupported, failed, batchId, error: message };

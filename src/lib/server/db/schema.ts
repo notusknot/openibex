@@ -387,5 +387,8 @@ export const syncJobs = sqliteTable('sync_jobs', {
 	// throttle / last-run record
 	lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
 	lastStatus: text('last_status'), // the SyncOutcome of the most recent run
-	lastError: text('last_error') // redacted message
+	lastError: text('last_error'), // redacted message
+	// circuit breaker: never retry a failing/rate-limited Garmin endpoint tightly
+	consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+	cooldownUntil: integer('cooldown_until', { mode: 'timestamp_ms' }) // breaker open until this time
 });

@@ -5,10 +5,15 @@ import path from 'node:path';
 import { resetDbForTests } from '$lib/server/db/client';
 import { registerWithEmailPassword } from '$lib/server/services/authService';
 import {
+	computeBackoffMs,
 	getSyncJob,
 	isSyncJobRunning,
 	releaseSyncJob,
-	tryAcquireSyncJob
+	tryAcquireSyncJob,
+	SYNC_ERROR_BACKOFF_BASE_MS,
+	SYNC_ERROR_BACKOFF_CAP_MS,
+	SYNC_RATE_LIMIT_BACKOFF_BASE_MS,
+	SYNC_RATE_LIMIT_BACKOFF_CAP_MS
 } from '$lib/server/repositories/syncJobsRepository';
 
 function setTestEnv(dataDir: string) {
@@ -94,5 +99,58 @@ describe('syncJobsRepository lock + throttle', () => {
 		expect(job.lastStatus).toBe('auth_failed');
 		expect(job.lastError).toBe('reconnect needed');
 		expect(job.lastRunAt?.getTime()).toBe(T0 + 5);
+	});
+
+	it('computeBackoffMs escalates and caps per status', () => {
+		// Generic error: base, then doubling, capped.
+		expect(computeBackoffMs(1, 'error')).toBe(SYNC_ERROR_BACKOFF_BASE_MS);
+		expect(computeBackoffMs(2, 'error')).toBe(SYNC_ERROR_BACKOFF_BASE_MS * 2);
+		expect(computeBackoffMs(99, 'error')).toBe(SYNC_ERROR_BACKOFF_CAP_MS);
+		// Rate-limit starts higher and caps higher.
+		expect(computeBackoffMs(1, 'rate_limited')).toBe(SYNC_RATE_LIMIT_BACKOFF_BASE_MS);
+		expect(computeBackoffMs(99, 'rate_limited')).toBe(SYNC_RATE_LIMIT_BACKOFF_CAP_MS);
+	});
+
+	it('opens the breaker after a failure: auto blocked, manual may retry a soft cool-down', () => {
+		expect(tryAcquireSyncJob(userId, win({ now: T0 }))).toBe(true);
+		releaseSyncJob(userId, { ok: false, status: 'error', error: 'boom' }, T0);
+
+		const job = getSyncJob(userId)!;
+		expect(job.consecutiveFailures).toBe(1);
+		expect(job.cooldownUntil?.getTime()).toBe(T0 + SYNC_ERROR_BACKOFF_BASE_MS);
+
+		// Auto-sync is blocked during the cool-down even though the throttle elapsed.
+		expect(tryAcquireSyncJob(userId, win({ now: T0 + 60_000 }))).toBe(false);
+		// A manual run may push through a soft (non-rate-limit) cool-down.
+		expect(tryAcquireSyncJob(userId, win({ now: T0 + 60_000, ignoreThrottle: true }))).toBe(true);
+	});
+
+	it('a rate-limit cool-down blocks even a manual run', () => {
+		expect(tryAcquireSyncJob(userId, win({ now: T0 }))).toBe(true);
+		releaseSyncJob(userId, { ok: false, status: 'rate_limited', error: '429' }, T0);
+
+		expect(getSyncJob(userId)!.cooldownUntil?.getTime()).toBe(T0 + SYNC_RATE_LIMIT_BACKOFF_BASE_MS);
+		expect(tryAcquireSyncJob(userId, win({ now: T0 + 60_000 }))).toBe(false);
+		expect(tryAcquireSyncJob(userId, win({ now: T0 + 60_000, ignoreThrottle: true }))).toBe(false);
+	});
+
+	it('escalates the cool-down on consecutive failures and resets on success', () => {
+		tryAcquireSyncJob(userId, win({ now: T0 }));
+		releaseSyncJob(userId, { ok: false, status: 'error' }, T0);
+		expect(getSyncJob(userId)!.consecutiveFailures).toBe(1);
+
+		// Re-acquire through the soft cool-down and fail again — escalates.
+		expect(tryAcquireSyncJob(userId, win({ now: T0 + 1000, ignoreThrottle: true }))).toBe(true);
+		releaseSyncJob(userId, { ok: false, status: 'error' }, T0 + 1000);
+		const job2 = getSyncJob(userId)!;
+		expect(job2.consecutiveFailures).toBe(2);
+		expect(job2.cooldownUntil?.getTime()).toBe(T0 + 1000 + SYNC_ERROR_BACKOFF_BASE_MS * 2);
+
+		// A success clears the breaker.
+		expect(tryAcquireSyncJob(userId, win({ now: T0 + 2000, ignoreThrottle: true }))).toBe(true);
+		releaseSyncJob(userId, { ok: true, status: 'ok' }, T0 + 2000);
+		const job3 = getSyncJob(userId)!;
+		expect(job3.consecutiveFailures).toBe(0);
+		expect(job3.cooldownUntil).toBeNull();
 	});
 });
