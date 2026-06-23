@@ -767,4 +767,79 @@
 		color: var(--muted);
 		margin: 0 0 10px;
 	}
+
+	/* ── Responsive ────────────────────────────────────────────────────── */
+
+	@media (max-width: 1199px) {
+		.stats-strip {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 899px) {
+		.grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 639px) {
+		.stats-strip {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 6px;
+		}
+		.stat-card {
+			padding: 9px 11px;
+		}
+		.stat-val {
+			font-size: 16px;
+		}
+		.head {
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+		.head-actions {
+			flex-wrap: wrap;
+		}
+		.title {
+			font-size: 18px;
+		}
+		.title-row {
+			flex-wrap: wrap;
+		}
+		.card {
+			padding: 12px 13px;
+		}
+		.chart-legend {
+			gap: 10px;
+		}
+		.axis-x {
+			/* Tighten label spacing on small viewports where date strings
+			   would otherwise collide. */
+			font-size: 8px;
+		}
+		.laps-grid {
+			/* Drop the HR bar at mobile widths — just show the numeric HR.
+			   Bar visual carries little info on a phone-width column. */
+			grid-template-columns: 38px minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) 42px;
+		}
+		.lap-hr-track {
+			display: none;
+		}
+		.lap-hr-cell {
+			justify-content: flex-end;
+			padding-right: 0;
+		}
+		.lap-hr-val {
+			width: auto;
+		}
+		.peaks-card,
+		.zones-card,
+		.route-card,
+		.link-card {
+			padding: 12px 14px;
+		}
+		.route-placeholder {
+			height: 110px;
+		}
+	}
 </style>

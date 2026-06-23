@@ -280,9 +280,12 @@
 	.thead,
 	.row {
 		display: grid;
-		grid-template-columns: 104px 64px minmax(0, 1fr) 78px 70px 56px 56px 130px;
+		/* Right-side numeric columns shrunk to give the title minmax(0,1fr) a
+		   meaningfully wider track — activity names were getting truncated
+		   prematurely on typical-width viewports. */
+		grid-template-columns: 92px 56px minmax(0, 1fr) 64px 58px 48px 44px 100px;
 		align-items: center;
-		padding: 0 16px;
+		padding: 0 14px;
 	}
 	.thead {
 		border-bottom: 1px solid var(--line);
@@ -300,7 +303,7 @@
 		text-align: right;
 	}
 	.th.ifbar-th {
-		padding-left: 14px;
+		padding-left: 10px;
 	}
 
 	.row {
@@ -330,10 +333,10 @@
 		padding: 2px 6px;
 	}
 	.cell-title {
-		font-size: 12.5px;
+		font-size: 13px;
 		font-weight: 600;
 		color: var(--ink);
-		padding: 11px 8px 11px 0;
+		padding: 11px 4px 11px 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -355,8 +358,8 @@
 	.cell-ifbar {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 11px 0 11px 14px;
+		gap: 6px;
+		padding: 11px 0 11px 10px;
 	}
 	.ifbar-track {
 		flex: 1;
