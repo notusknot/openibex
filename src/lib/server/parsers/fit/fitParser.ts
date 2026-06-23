@@ -11,10 +11,11 @@ export class FitNotAnActivityError extends Error {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Garmin's recent export names every .fit `<email>_<id>.fit`; older ones used
-// `<id>_ACTIVITY.fit`. Treat those as filler — the parsed sport + start date is
-// a much better human-readable title than the raw filename.
-export function composeFallbackTitle(input: {
+// Sensible default title for parseFit's return shape. Almost always overridden
+// by the caller (garmin / single-upload services compose a smart title from
+// Garmin metadata + time-of-day). Kept here so parseFit produces a self-
+// contained result even when called outside the normal pipelines.
+function composeFallbackTitle(input: {
 	originalFilename: string;
 	sport: Sport;
 	startTime: Date;

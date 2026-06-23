@@ -4,13 +4,18 @@ import { resetDbForTests, getDb } from '$lib/server/db/client';
 import { activityFiles, activities, importJobs } from '$lib/server/db/schema';
 import { registerWithEmailPassword } from '$lib/server/services/authService';
 
+// Local 7:30 AM — deterministic across server TZ since the Date constructor
+// uses local time. The service composes a smart title from this, so we expect
+// "Morning Run" regardless of what the parser returned as a placeholder title.
+const MOCK_START = new Date(2026, 0, 1, 7, 30);
+
 vi.mock('$lib/server/parsers/fit/fitParser', () => {
 	return {
 		parseFit: async () => ({
 			summary: {
 				sport: 'Run',
 				title: 'Mock Activity',
-				startTime: new Date('2026-01-01T12:00:00Z'),
+				startTime: MOCK_START,
 				durationSec: 3600,
 				movingTimeSec: 3500,
 				distanceM: 10000,
@@ -65,7 +70,9 @@ describe('fitImportService', () => {
 
 		const acts = db.select().from(activities).all();
 		expect(acts.length).toBe(1);
-		expect(acts[0]?.title).toBe('Mock Activity');
+		// fitImportService now composes a Strava-style title (time-of-day + sport)
+		// regardless of what parseFit returned. 7:30 AM local => "Morning Run".
+		expect(acts[0]?.title).toBe('Morning Run');
 		expect(acts[0]?.id).toBe(result.activityId);
 
 		const jobs = db.select().from(importJobs).all();

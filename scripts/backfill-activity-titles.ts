@@ -5,11 +5,12 @@ import {
 	updateActivityTitleForUser
 } from '../src/lib/server/repositories/activitiesRepository';
 import { getUserByEmail } from '../src/lib/server/repositories/usersRepository';
-import { composeFallbackTitle } from '../src/lib/server/parsers/fit/fitParser';
 import {
 	loadGarminMetadata,
-	resolveNameByFingerprint
+	resolveNameByFingerprint,
+	type GarminMetadataLookup
 } from '../src/lib/server/services/imports/garminMetadata';
+import { composeSmartTitle } from '../src/lib/server/services/imports/titleStrategy';
 
 type Args = { userEmail: string; exportPath: string | null; dryRun: boolean; source: string | null };
 
@@ -31,7 +32,12 @@ function parseArgs(argv: string[]): Args {
 	if (!userEmail) {
 		throw new Error(
 			'Missing required arg: --user user@example.com\n' +
-				'Usage: pnpm titles:backfill -- --user EMAIL [--path /garmin/export/root] [--source garmin-export] [--dry-run]'
+				'Usage: pnpm titles:backfill -- --user EMAIL [--path /garmin/export/root] [--source garmin-export] [--dry-run]\n' +
+				'  --path: optional path to a Garmin export root. If supplied, activities matching\n' +
+				'    summarizedActivities*.json by start time + sport get the real Garmin name.\n' +
+				'    Unmatched activities get "Morning Run" / "Afternoon Bike" / etc.\n' +
+				'  --source: which activity.source to retitle (default: garmin-export). Pass empty to retitle all.\n' +
+				'  --dry-run: preview counts; no DB writes.'
 		);
 	}
 	return {
@@ -42,14 +48,8 @@ function parseArgs(argv: string[]): Args {
 	};
 }
 
-function looksGenerated(title: string | null | undefined): boolean {
-	if (!title) return true;
-	const t = title.trim();
-	if (t.length === 0) return true;
-	if (t.includes('@')) return true;
-	if (/^[0-9]+$/.test(t)) return true;
-	if (/^[0-9]+_ACTIVITY$/i.test(t)) return true;
-	return false;
+function emptyLookup(): GarminMetadataLookup {
+	return { totalActivities: 0, byActivityId: new Map(), byStartMinute: new Map() };
 }
 
 async function main() {
@@ -57,45 +57,34 @@ async function main() {
 	const user = await getUserByEmail(userEmail.trim().toLowerCase());
 	if (!user) throw new Error(`User not found: ${userEmail}`);
 
-	const lookup = exportPath
-		? await loadGarminMetadata(exportPath)
-		: { totalActivities: 0, byActivityId: new Map(), byStartMinute: new Map() };
+	const lookup = exportPath ? await loadGarminMetadata(exportPath) : emptyLookup();
 	if (exportPath) {
 		console.log(`Loaded ${lookup.totalActivities} activities from Garmin metadata at ${exportPath}`);
 	} else {
-		console.log('No --path supplied; titles will only get the Sport · date fallback.');
+		console.log('No --path supplied; titles will use the time-of-day fallback only.');
 	}
 
 	const all = await listAllActivitiesForUser(user.id);
 	const candidates = source ? all.filter((a) => a.source === source) : all;
 
 	let metaHits = 0;
-	let fallbackHits = 0;
+	let timeOfDayHits = 0;
 	let unchanged = 0;
-	let skipped = 0;
 
 	for (const a of candidates) {
-		if (!looksGenerated(a.title)) {
-			skipped += 1;
-			continue;
-		}
-		const metaName = resolveNameByFingerprint(lookup, {
+		const startTime = new Date(a.startTime);
+		const metaName = resolveNameByFingerprint(lookup, { sport: a.sport, startTime });
+		const nextTitle = composeSmartTitle({
+			metadataLookup: lookup,
 			sport: a.sport,
-			startTime: new Date(a.startTime)
+			startTime
 		});
-		const nextTitle =
-			metaName ??
-			composeFallbackTitle({
-				originalFilename: a.sourceFilename ?? '',
-				sport: a.sport,
-				startTime: new Date(a.startTime)
-			});
 		if (nextTitle === a.title) {
 			unchanged += 1;
 			continue;
 		}
 		if (metaName) metaHits += 1;
-		else fallbackHits += 1;
+		else timeOfDayHits += 1;
 		if (!dryRun) {
 			await updateActivityTitleForUser({ id: a.id, userId: user.id, title: nextTitle });
 		}
@@ -104,8 +93,7 @@ async function main() {
 	console.log(
 		`scanned=${candidates.length} ` +
 			`renamed-from-metadata=${metaHits} ` +
-			`renamed-from-fallback=${fallbackHits} ` +
-			`already-clean=${skipped} ` +
+			`renamed-from-time-of-day=${timeOfDayHits} ` +
 			`unchanged=${unchanged}` +
 			(dryRun ? ' (dry run — no DB writes)' : '')
 	);

@@ -6,6 +6,7 @@ import { createActivityFile, getActivityFileByShaForUser } from '$lib/server/rep
 import { createImportJob, updateImportJobStatus } from '$lib/server/repositories/importJobsRepository';
 import { parseFit } from '$lib/server/parsers/fit/fitParser';
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
+import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 
 export class DuplicateUploadError extends Error {
 	readonly existingActivityFileId: string;
@@ -76,12 +77,18 @@ export async function importFitUpload(input: {
 		const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
 		const stream = await writeStreamBlob({ activityId, gzipBytes });
 
+		const title = composeSmartTitle({
+			metadataLookup: null,
+			sport: parsed.summary.sport,
+			startTime: parsed.summary.startTime
+		});
+
 		await createActivity({
 			id: activityId,
 			userId: input.userId,
 			activityFileId,
 			sport: parsed.summary.sport,
-			title: parsed.summary.title,
+			title,
 			startTime: parsed.summary.startTime,
 			durationSec: parsed.summary.durationSec,
 			movingTimeSec: parsed.summary.movingTimeSec,
