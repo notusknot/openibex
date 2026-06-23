@@ -16,3 +16,6 @@ data/*.db-shm
 
 *.log
 .DS_Store
+
+# Claude Design handoff archives — kept locally, not tracked.
+*-handoff.zip
