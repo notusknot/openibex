@@ -30,21 +30,28 @@ function extToFormat(ext: string): DetectedFormat {
 	}
 }
 
+// Garmin has used both `DI-Connect-Fitness-Uploaded-Files` (older exports) and
+// `DI-Connect-Uploaded-Files` (recent exports) as the activity-archive folder.
+const UPLOADED_FILES_NEEDLES = [
+	'di_connect/di-connect-fitness-uploaded-files',
+	'di_connect/di-connect-uploaded-files'
+];
+
 export async function findGarminUploadedFilesRoot(inputPath: string): Promise<string> {
 	// If the user already points to the uploaded-files folder, keep it.
-	const normalized = inputPath.replaceAll('\\', '/');
-	if (normalized.toLowerCase().includes('di_connect/di-connect-fitness-uploaded-files'.toLowerCase())) {
-		return inputPath;
+	const normalized = inputPath.toLowerCase().replaceAll('\\', '/');
+	for (const needle of UPLOADED_FILES_NEEDLES) {
+		if (normalized.includes(needle)) return inputPath;
 	}
 
-	// Try to locate DI_CONNECT/DI-Connect-Fitness-Uploaded-Files within the provided directory tree.
+	// Try to locate either uploaded-files folder within the provided directory tree.
 	for await (const file of walkFiles(inputPath)) {
-		// We only need directory hits; avoid scanning everything by checking path segments.
-		// This heuristic is fast enough for typical exports.
 		const lower = file.toLowerCase().replaceAll('\\', '/');
-		const idx = lower.indexOf('di_connect/di-connect-fitness-uploaded-files/');
-		if (idx !== -1) {
-			return file.slice(0, idx + 'di_connect/di-connect-fitness-uploaded-files'.length);
+		for (const needle of UPLOADED_FILES_NEEDLES) {
+			const idx = lower.indexOf(`${needle}/`);
+			if (idx !== -1) {
+				return file.slice(0, idx + needle.length);
+			}
 		}
 	}
 	return inputPath;

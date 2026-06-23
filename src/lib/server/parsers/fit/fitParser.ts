@@ -2,6 +2,13 @@ import type { Sport } from '$lib/server/db/schema';
 
 const PARSER_VERSION = 'fit-file-parser';
 
+export class FitNotAnActivityError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'FitNotAnActivityError';
+	}
+}
+
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Garmin's recent export names every .fit `<email>_<id>.fit`; older ones used
@@ -87,6 +94,11 @@ export async function parseFit(buffer: Uint8Array, originalFilename: string): Pr
 	});
 
 	const session = Array.isArray(fitData?.sessions) ? fitData.sessions[0] : fitData?.session;
+	if (!session) {
+		throw new FitNotAnActivityError(
+			'FIT file has no session message (likely a device-sync, settings, course, workout, or monitoring file, not an activity recording).'
+		);
+	}
 	const sport = mapSport(session?.sport ?? session?.sportProfile ?? session?.subSport ?? fitData?.sport);
 
 	const startTime = coerceDate(session?.start_time ?? session?.startTime ?? fitData?.start_time) ?? new Date();

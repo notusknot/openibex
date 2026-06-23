@@ -47,6 +47,13 @@ export async function createActivityFile(input: {
 		.run();
 }
 
+export async function deleteActivityFileForUser(input: { id: string; userId: string }): Promise<void> {
+	const db = getDb();
+	db.delete(activityFiles)
+		.where(and(eq(activityFiles.id, input.id), eq(activityFiles.userId, input.userId)))
+		.run();
+}
+
 export async function listActivityFilesForUser(userId: string, limit: number): Promise<DbActivityFile[]> {
 	const db = getDb();
 	return db

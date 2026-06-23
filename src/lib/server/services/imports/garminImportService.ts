@@ -4,7 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 
 import { getEnv } from '$lib/server/env';
-import { parseFit } from '$lib/server/parsers/fit/fitParser';
+import { FitNotAnActivityError, parseFit } from '$lib/server/parsers/fit/fitParser';
 import { createActivity, getActivityByFingerprintForUser, getActivityBySourceActivityIdForUser, getActivityBySourceFileShaForUser } from '$lib/server/repositories/activitiesRepository';
 import { createActivityFile, getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
@@ -238,7 +238,30 @@ export async function importGarminHistoricalExport(input: {
 					if (e?.code !== 'EEXIST') throw e;
 				}
 
-				const parsed = await parseFit(bytes, c.originalFilename);
+				let parsed;
+				try {
+					parsed = await parseFit(bytes, c.originalFilename);
+				} catch (err) {
+					if (err instanceof FitNotAnActivityError) {
+						await updateImportItem({
+							id: itemId,
+							batchId,
+							userId: user.id,
+							status: 'unsupported',
+							errorMessage: err.message
+						});
+						await updateImportBatchProgress({
+							id: batchId,
+							userId: user.id,
+							processedFiles,
+							importedCount,
+							duplicateCount,
+							failedCount
+						});
+						continue;
+					}
+					throw err;
+				}
 				const metaName = resolveNameByFingerprint(metadataLookup, {
 					sport: parsed.summary.sport,
 					startTime: parsed.summary.startTime

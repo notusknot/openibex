@@ -9,10 +9,21 @@ import { activities, importBatches, importItems } from '$lib/server/db/schema';
 import { registerWithEmailPassword } from '$lib/server/services/authService';
 
 vi.mock('$lib/server/parsers/fit/fitParser', () => {
+	class FitNotAnActivityError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = 'FitNotAnActivityError';
+		}
+	}
 	return {
+		FitNotAnActivityError,
 		parseFit: async (_bytes: Uint8Array, originalFilename: string) => {
-			if (originalFilename.toLowerCase().includes('bad')) {
+			const lower = originalFilename.toLowerCase();
+			if (lower.includes('bad')) {
 				throw new Error('Invalid FIT');
+			}
+			if (lower.includes('sessionless')) {
+				throw new FitNotAnActivityError('FIT file has no session message (mock).');
 			}
 			return {
 				summary: {
@@ -130,6 +141,24 @@ describe('garminImportService', () => {
 
 		const db = getDb();
 		expect(db.select().from(activities).all().length).toBe(1);
+	});
+
+	it('sessionless FIT (settings/sync/course/etc) is marked unsupported, not imported', async () => {
+		const { user } = await registerWithEmailPassword({ email: 'ghost@example.com', password: 'password123' });
+		const exportRoot = await mkTmpDir('openibex-garmin-export-');
+		await writeGarminFit(exportRoot, 'sessionless-1.fit', new Uint8Array([10, 20]));
+		await writeGarminFit(exportRoot, 'good.fit', new Uint8Array([1, 2, 3]));
+
+		const result = await importGarminHistoricalExport({ userEmail: user.email, path: exportRoot });
+		expect(result.importedCount).toBe(1);
+		expect(result.failedCount).toBe(0);
+		expect(result.duplicateCount).toBe(0);
+
+		const db = getDb();
+		expect(db.select().from(activities).all().length).toBe(1);
+		const items = db.select().from(importItems).all();
+		expect(items.some((x) => x.status === 'unsupported')).toBe(true);
+		expect(items.some((x) => x.status === 'imported')).toBe(true);
 	});
 
 	it('users cannot view another user’s import batch via repository scoping', async () => {

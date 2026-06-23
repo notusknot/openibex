@@ -202,6 +202,13 @@ export async function sumActivitiesForUserInTimeRange(input: {
 	return row ?? { loadSum: 0, durationSecSum: 0, distanceMSum: 0 };
 }
 
+export async function deleteActivityForUser(input: { id: string; userId: string }): Promise<void> {
+	const db = getDb();
+	db.delete(activities)
+		.where(and(eq(activities.id, input.id), eq(activities.userId, input.userId)))
+		.run();
+}
+
 export async function updateActivityTitleForUser(input: {
 	id: string;
 	userId: string;
