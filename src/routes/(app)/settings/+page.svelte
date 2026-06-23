@@ -576,4 +576,50 @@
 	.logout-form {
 		display: none;
 	}
+
+	/* ── Responsive ───────────────────────────────────────────────────── */
+
+	@media (max-width: 767px) {
+		.layout {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0;
+		}
+		.subnav {
+			/* Sticky 170-px subnav is only useful on desktop — sections are
+			   anchor-linked but on mobile the user just scrolls. */
+			display: none;
+		}
+		.card {
+			padding: 16px;
+		}
+		.field-grid.four-col {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.field-grid.two-col {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.display-row,
+		.account-row {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 10px;
+		}
+		.seg-toggle {
+			align-self: flex-start;
+		}
+		.integration-row {
+			flex-wrap: wrap;
+		}
+		.integration-meta {
+			min-width: 0;
+			flex: 1 1 50%;
+		}
+		.form-foot {
+			flex-wrap: wrap;
+		}
+		.save-status {
+			width: 100%;
+			text-align: right;
+		}
+	}
 </style>

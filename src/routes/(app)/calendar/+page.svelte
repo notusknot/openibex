@@ -30,6 +30,12 @@
 		{ key: 'Run', display: 'run', label: 'Run' }
 	];
 
+	function dowFor(dateStr: string): string {
+		// `T12:00:00` to avoid timezone-shift surprises.
+		const d = new Date(`${dateStr}T12:00:00`);
+		return DOW_LABELS[(d.getDay() + 6) % 7]!;
+	}
+
 	function defaultModalDay(): number {
 		const today = calendar.todayDate;
 		if (today && today.startsWith(calendar.monthParam)) {
@@ -134,8 +140,10 @@
 						class="cal-cell"
 						class:out={!cell.inMonth}
 						class:today={cell.isToday}
+						class:has-sessions={cell.sessions.length > 0}
 					>
 						<div class="cal-cell-head">
+							<span class="cal-dow-mobile oi-mono" aria-hidden="true">{dowFor(cell.date)}</span>
 							<span class="cal-day-num oi-mono" class:today={cell.isToday} class:dim={!cell.inMonth}>
 								{cell.day}
 							</span>
@@ -792,5 +800,106 @@
 		padding: 14px 20px;
 		border-top: 1px solid var(--line);
 		background: var(--bg-soft);
+	}
+
+	/* Hidden by default; agenda layout brings it on mobile. */
+	.cal-dow-mobile {
+		display: none;
+	}
+
+	/* ── Responsive ─────────────────────────────────────────────────────
+	   The desktop grid (7 day cols + 108 week col) doesn't shrink past
+	   ~700px usefully. At tablet we drop the week summary col; at phone
+	   we collapse to an agenda layout — one row per day, out-of-month
+	   and empty-day cells hidden. */
+
+	@media (max-width: 899px) {
+		.cal-grid {
+			grid-template-columns: repeat(7, minmax(0, 1fr));
+		}
+		.cal-dow-week,
+		.cal-week-sum {
+			display: none;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.head {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 12px;
+		}
+		.head-actions {
+			justify-content: space-between;
+		}
+		.summary-strip {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.cal-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.cal-dow {
+			display: none;
+		}
+		/* Hide empty in-month days and all out-of-month days — agenda
+		   shows only what you've planned/completed (plus today). */
+		.cal-cell:not(.has-sessions):not(.today),
+		.cal-cell.out {
+			display: none;
+		}
+		.cal-cell {
+			flex-direction: row;
+			align-items: flex-start;
+			gap: 14px;
+			min-height: auto;
+			padding: 14px 12px;
+			border-left: none;
+		}
+		.cal-cell.today {
+			box-shadow: inset 4px 0 0 var(--green);
+		}
+		.cal-cell-head {
+			flex-direction: column;
+			align-items: center;
+			gap: 2px;
+			margin-bottom: 0;
+			width: 48px;
+			flex: none;
+		}
+		.cal-dow-mobile {
+			display: block;
+			font-size: 9px;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			color: var(--faint);
+			font-weight: 600;
+		}
+		.cal-day-num {
+			font-size: 20px;
+		}
+		.cal-day-num.today {
+			width: 28px;
+			height: 28px;
+			line-height: 28px;
+		}
+		.cal-add {
+			display: none; /* Use the global "+ New planned" header button on phone */
+		}
+		.cal-sessions {
+			flex: 1;
+			min-width: 0;
+			gap: 6px;
+		}
+		.cal-chip {
+			padding: 7px 10px;
+		}
+		.cal-chip-title {
+			font-size: 12px;
+		}
+		/* The grid-wrap's border-radius would clip these row borders; lighten
+		   the row separator instead of relying on the cell's bottom border. */
+		.cal-grid-wrap {
+			border-radius: 12px;
+		}
 	}
 </style>

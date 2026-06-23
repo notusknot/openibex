@@ -483,6 +483,9 @@
 			padding: 16px 16px calc(82px + env(safe-area-inset-bottom, 0px));
 			/* Allow momentum scroll on iOS. */
 			-webkit-overflow-scrolling: touch;
+			/* Safety net: nothing in the app should produce horizontal scroll
+			   on a phone — clip if a rogue element does anyway. */
+			overflow-x: hidden;
 		}
 	}
 

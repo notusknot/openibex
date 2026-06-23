@@ -164,30 +164,36 @@
 		gap: 8px;
 		align-items: center;
 	}
-	.pill {
-		font-size: 11px;
+	/* Three top-bar controls (period pill, Export, Upload) share identical
+	   padding, font size, weight, line-height, radius — so they line up at
+	   the same height instead of looking ragged. Only font-family and
+	   color/bg differ to keep visual hierarchy. */
+	.pill,
+	.btn {
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 1.2;
+		border-radius: 8px;
+		padding: 9px 13px;
 		color: var(--btn-ink);
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 7px;
-		padding: 8px 12px;
+		text-decoration: none;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+	}
+	.pill {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-feature-settings: 'tnum' 1;
 	}
 	.btn {
-		font: 600 12px 'Archivo', system-ui, sans-serif;
-		color: var(--btn-ink);
-		background: var(--card);
-		border: 1px solid var(--line);
-		border-radius: 7px;
-		padding: 8px 13px;
-		cursor: pointer;
-		text-decoration: none;
-		line-height: 1.2;
+		font-family: 'Archivo', system-ui, sans-serif;
 	}
 	.btn-primary {
 		color: #fff;
 		background: var(--green);
 		border-color: transparent;
-		padding: 8px 14px;
 	}
 	.btn-small {
 		padding: 6px 12px;
@@ -389,5 +395,53 @@
 	.tfoot-count {
 		font-size: 10.5px;
 		color: var(--faint);
+	}
+
+	/* ── Responsive ───────────────────────────────────────────────────── */
+
+	@media (max-width: 640px) {
+		.head {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 12px;
+		}
+		.head-actions {
+			justify-content: space-between;
+			flex-wrap: wrap;
+		}
+		.summary-strip {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.filter-row {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 8px;
+		}
+		.sort-label {
+			display: none;
+		}
+		.thead,
+		.row {
+			grid-template-columns: 76px 50px minmax(0, 1fr) 48px;
+			padding: 0 12px;
+		}
+		/* Hide Dist (col 4), Time (col 5), IF (col 7), IF-bar (col 8). Keep
+		   Date / Sport / Title / TSS — the essentials for scanning. */
+		.thead > :nth-child(4),
+		.thead > :nth-child(5),
+		.thead > :nth-child(7),
+		.thead > :nth-child(8),
+		.row > :nth-child(4),
+		.row > :nth-child(5),
+		.row > :nth-child(7),
+		.row > :nth-child(8) {
+			display: none;
+		}
+		.cell-date {
+			font-size: 11.5px;
+		}
+		.tfoot {
+			padding: 12px;
+		}
 	}
 </style>
