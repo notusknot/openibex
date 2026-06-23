@@ -178,30 +178,6 @@ export async function countActivitiesForUser(userId: string): Promise<number> {
 	return row?.c ?? 0;
 }
 
-export async function sumActivitiesForUserInTimeRange(input: {
-	userId: string;
-	from: Date;
-	to: Date;
-}): Promise<{ loadSum: number; durationSecSum: number; distanceMSum: number }> {
-	const db = getDb();
-	const row = db
-		.select({
-			loadSum: sql<number>`coalesce(sum(${activities.loadScore}), 0)`,
-			durationSecSum: sql<number>`coalesce(sum(${activities.durationSec}), 0)`,
-			distanceMSum: sql<number>`coalesce(sum(${activities.distanceM}), 0)`
-		})
-		.from(activities)
-		.where(
-			and(
-				eq(activities.userId, input.userId),
-				gte(activities.startTime, input.from),
-				lte(activities.startTime, input.to)
-			)
-		)
-		.get();
-	return row ?? { loadSum: 0, durationSecSum: 0, distanceMSum: 0 };
-}
-
 export async function deleteActivityForUser(input: { id: string; userId: string }): Promise<void> {
 	const db = getDb();
 	db.delete(activities)

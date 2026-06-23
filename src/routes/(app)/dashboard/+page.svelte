@@ -1146,4 +1146,76 @@
 		font-weight: 600;
 		color: var(--ink2);
 	}
+
+	/* ── Responsive ──────────────────────────────────────────────────────
+	   Progressive degradation: 6-col KPI → 3-col tablet → 2-col phone.
+	   Both rows collapse to single column below tablet; side-col cards go
+	   horizontal at tablet so they don't waste vertical space. */
+
+	@media (max-width: 1199px) {
+		.kpi-strip {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 899px) {
+		.row-pmc {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.side-col {
+			flex-direction: row;
+			flex-wrap: wrap;
+			gap: 11px;
+		}
+		.side-col > .card {
+			flex: 1 1 calc(33% - 8px);
+			min-width: 0;
+		}
+		.row-bottom {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 639px) {
+		.kpi-strip {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.side-col {
+			flex-direction: column;
+		}
+		.side-col > .card {
+			flex: none;
+		}
+		.head {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 12px;
+		}
+		.head-actions {
+			flex-wrap: wrap;
+		}
+		.pill {
+			display: none; /* sport filter pill — non-essential on phone */
+		}
+		.card-head {
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+		.card-head-left {
+			flex-wrap: wrap;
+		}
+		.recent-thead,
+		.recent-row {
+			grid-template-columns: 64px 50px minmax(0, 1fr) 44px;
+		}
+		.recent-thead > :nth-child(4),
+		.recent-thead > :nth-child(5),
+		.recent-row > :nth-child(4),
+		.recent-row > :nth-child(5) {
+			display: none; /* Drop Dist + Time on phone — Date/Sport/Title/TSS suffice */
+		}
+		.recent-card {
+			padding: 12px 12px 4px;
+		}
+	}
 </style>

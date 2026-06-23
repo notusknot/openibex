@@ -95,6 +95,16 @@
 	<main class="oi-main" id="main" tabindex="-1">
 		<slot />
 	</main>
+
+	<nav class="bottom-tabs" aria-label="Primary (mobile)">
+		{#each navItems as item}
+			{@const active = isActive(pathname, item.href)}
+			<a class="tab" class:active href={item.href} aria-current={active ? 'page' : undefined}>
+				<span class="tab-dot" class:active aria-hidden="true"></span>
+				<span class="tab-label">{item.label}</span>
+			</a>
+		{/each}
+	</nav>
 </div>
 
 <style>
@@ -364,6 +374,58 @@
 		overscroll-behavior: contain;
 		min-width: 0;
 		padding: 20px 24px 28px;
+	}
+
+	.bottom-tabs {
+		display: none;
+	}
+
+	@media (max-width: 767px) {
+		.rail {
+			display: none;
+		}
+		.bottom-tabs {
+			display: flex;
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			height: 64px;
+			background: var(--card);
+			border-top: 1px solid var(--line);
+			justify-content: space-around;
+			align-items: stretch;
+			padding: 8px 0 max(8px, env(safe-area-inset-bottom, 0px));
+			z-index: 10;
+		}
+		.tab {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 4px;
+			flex: 1;
+			text-decoration: none;
+			color: var(--muted);
+			font-size: 11px;
+			font-weight: 600;
+			padding: 4px 6px;
+		}
+		.tab.active {
+			color: var(--green);
+		}
+		.tab-dot {
+			width: 6px;
+			height: 6px;
+			border-radius: 50%;
+			background: transparent;
+		}
+		.tab-dot.active {
+			background: var(--green);
+		}
+		.oi-main {
+			padding: 16px 16px 88px;
+		}
 	}
 	:global(.oi-main::-webkit-scrollbar) {
 		width: 10px;
