@@ -12,7 +12,7 @@ const PUBLIC_PREFIXES = [
 	'/@id',
 	'/__vite_ping'
 ];
-const PUBLIC_PATHS = ['/', '/login', '/register', '/logout'];
+const PUBLIC_PATHS = ['/login', '/register', '/logout'];
 
 function isPublicPath(pathname: string): boolean {
 	if (PUBLIC_PATHS.includes(pathname)) return true;
@@ -46,6 +46,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const pathname = event.url.pathname;
+	// The root path is the app home: send signed-in users to the dashboard,
+	// everyone else to login. There is no separate landing page.
+	if (pathname === '/') {
+		throw redirect(303, event.locals.user ? '/dashboard' : '/login');
+	}
+
 	if (event.locals.user && isAuthPage(pathname)) {
 		throw redirect(303, '/dashboard');
 	}

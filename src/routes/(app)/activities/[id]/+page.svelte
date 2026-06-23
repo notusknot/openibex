@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import BackLink from '$lib/components/ui/BackLink.svelte';
 
 	export let data: PageData;
 	$: detail = data.detail;
@@ -124,7 +125,7 @@
 <section class="detail">
 	<header class="head">
 		<div class="head-left">
-			<a class="back" href="/activities" aria-label="Back to activities">‹</a>
+			<BackLink fallback="/activities" fallbackLabel="activities" />
 			<div>
 				<div class="title-row">
 					<h1 class="title">{activity.title}</h1>
@@ -139,6 +140,17 @@
 			{#if detail.file}
 				<a class="btn" href="/activities/files/{detail.file.id}/download">Export .fit</a>
 			{/if}
+			<form
+				method="POST"
+				action="?/delete"
+				on:submit={(e) => {
+					if (!confirm(`Delete "${activity.title}"? This permanently removes the activity, its streams, and the original file.`)) {
+						e.preventDefault();
+					}
+				}}
+			>
+				<button type="submit" class="btn btn-danger">Delete</button>
+			</form>
 		</div>
 	</header>
 
@@ -346,23 +358,6 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 13px;
-	}
-	.back {
-		margin-top: 3px;
-		width: 30px;
-		height: 30px;
-		border-radius: 7px;
-		border: 1px solid var(--line);
-		background: var(--card);
-		color: var(--btn-ink);
-		font-size: 15px;
-		line-height: 28px;
-		text-align: center;
-		text-decoration: none;
-		flex: none;
-	}
-	.back:hover {
-		color: var(--ink);
 	}
 	.title-row {
 		display: flex;

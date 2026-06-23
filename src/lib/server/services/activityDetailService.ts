@@ -1,14 +1,20 @@
 import {
 	getActivityByIdForUser,
+	deleteActivityForUser,
 	type DbActivity
 } from '$lib/server/repositories/activitiesRepository';
 import {
 	getActivityFileByIdForUser,
+	deleteActivityFileForUser,
 	type DbActivityFile
 } from '$lib/server/repositories/activityFilesRepository';
 import { getPlannedWorkoutByIdForUser } from '$lib/server/repositories/plannedWorkoutsRepository';
 import { getWorkoutLinkForActivity } from '$lib/server/repositories/workoutLinksRepository';
-import { readStreamBlob } from '$lib/server/services/fileStorageService';
+import {
+	readStreamBlob,
+	removeFile,
+	removeStreamBlob
+} from '$lib/server/services/fileStorageService';
 import {
 	intensityFactorFor,
 	loadFor as sharedLoadFor,
@@ -455,4 +461,33 @@ export async function getActivityDetail(input: {
 		peaks,
 		route
 	};
+}
+
+/**
+ * Permanently delete an activity belonging to a user, along with its parsed
+ * stream blob and its original uploaded file. Workout links are removed by the
+ * `ON DELETE CASCADE` on the activities row; import_items/import_jobs back-refs
+ * fall away via the schema's set-null / cascade rules. Returns false if the
+ * activity doesn't exist (or isn't owned by the user).
+ */
+export async function deleteActivity(input: {
+	userId: string;
+	activityId: string;
+}): Promise<boolean> {
+	const activity = await getActivityByIdForUser(input.activityId, input.userId);
+	if (!activity) return false;
+
+	// Drop the original upload (file row + bytes on disk) so a re-upload of the
+	// same FIT isn't rejected as a duplicate of a now-deleted activity.
+	if (activity.activityFileId) {
+		const file = await getActivityFileByIdForUser(activity.activityFileId, input.userId);
+		if (file) {
+			await removeFile(file.filePath);
+			await deleteActivityFileForUser({ id: file.id, userId: input.userId });
+		}
+	}
+
+	await removeStreamBlob(input.activityId);
+	await deleteActivityForUser({ id: input.activityId, userId: input.userId });
+	return true;
 }

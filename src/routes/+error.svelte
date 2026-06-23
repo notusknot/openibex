@@ -8,7 +8,7 @@
 </p>
 <pre class="error">{String($page.error?.message ?? $page.error ?? 'Unknown error')}</pre>
 <p>
-	<a href="/dashboard">Go to dashboard</a> · <a href="/">Home</a>
+	<a href="/dashboard">Go to dashboard</a>
 </p>
 
 <style>

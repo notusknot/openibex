@@ -7,14 +7,17 @@
 			content="width=device-width, initial-scale=1, viewport-fit=cover"
 		/>
 
-		<!-- iOS Safari URL bar & PWA chrome color. JS in AppShell keeps these
-		     in sync with the in-app theme store on light/dark toggle. -->
-		<meta name="theme-color" content="#f4f2ec" media="(prefers-color-scheme: light)" />
-		<meta name="theme-color" content="#0d1a15" media="(prefers-color-scheme: dark)" />
+		<!-- PWA / browser chrome color. A single media-less tag (not split by
+		     prefers-color-scheme) so JS in AppShell can keep it in sync with the
+		     in-app theme store — the static media tags used to win in document
+		     order and pin the chrome to the OS scheme, ignoring the app toggle. -->
+		<meta name="theme-color" content="#f4f2ec" />
 
-		<!-- PWA / "Add to Home Screen" on iOS. -->
+		<!-- PWA / "Add to Home Screen" on iOS. `black-translucent` makes the iOS
+		     standalone status bar transparent so the themed page background shows
+		     through and it adapts to light/dark instead of staying a fixed color. -->
 		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<meta name="apple-mobile-web-app-title" content="OpenIbex" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="application-name" content="OpenIbex" />

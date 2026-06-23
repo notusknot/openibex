@@ -1,4 +1,6 @@
 <script lang="ts">
+	import BackLink from '$lib/components/ui/BackLink.svelte';
+
 	export let form: { error?: string } | null;
 
 	let fileName = '';
@@ -25,7 +27,7 @@
 
 <section class="upload">
 	<header class="head">
-		<a class="back" href="/activities" aria-label="Back to activities">‹</a>
+		<BackLink fallback="/activities" fallbackLabel="activities" />
 		<div>
 			<h1 class="title">Upload .fit</h1>
 			<p class="subtitle oi-mono">A single Garmin/Wahoo FIT activity file</p>
@@ -88,23 +90,6 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 13px;
-	}
-	.back {
-		margin-top: 3px;
-		width: 30px;
-		height: 30px;
-		border-radius: 7px;
-		border: 1px solid var(--line);
-		background: var(--card);
-		color: var(--btn-ink);
-		font-size: 15px;
-		line-height: 28px;
-		text-align: center;
-		text-decoration: none;
-		flex: none;
-	}
-	.back:hover {
-		color: var(--ink);
 	}
 	.title {
 		font-size: 22px;

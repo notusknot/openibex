@@ -41,6 +41,23 @@ export async function writeStreamBlob(input: {
 	return { relativePath };
 }
 
+/** Best-effort delete of a stored file by its data-dir-relative path. Missing files are ignored. */
+export async function removeFile(relativePath: string): Promise<void> {
+	const env = getEnv();
+	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, relativePath);
+	try {
+		await fs.unlink(absolutePath);
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException)?.code;
+		if (code !== 'ENOENT') throw err;
+	}
+}
+
+/** Best-effort delete of an activity's parsed stream blob. */
+export async function removeStreamBlob(activityId: string): Promise<void> {
+	await removeFile(streamRelativePath(activityId));
+}
+
 export async function readUploadFile(relativePath: string): Promise<Uint8Array> {
 	const env = getEnv();
 	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, relativePath);

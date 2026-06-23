@@ -66,13 +66,13 @@
 
 <div class="oi oi-root" data-theme={$theme}>
 	<aside class="rail">
-		<div class="brand-row">
+		<a class="brand-row" href="/dashboard">
 			<div class="logo oi-mono">OI</div>
 			<div>
 				<div class="brand-name">OpenIbex</div>
 				<div class="brand-tag oi-mono">TRAINING COCKPIT</div>
 			</div>
-		</div>
+		</a>
 
 		<nav class="nav" aria-label="Primary">
 			{#each navItems as item}
@@ -191,6 +191,22 @@
 		--swim-soft: #eaf2f7;
 		--bike-soft: #f8f0dd;
 		--run-soft: #e8f1ec;
+		/* KPI indicator status tones: text, chip background, shaded-zone tint. */
+		--st-good: #1c5d3a;
+		--st-good-bg: #e8f1ec;
+		--st-good-tint: rgba(28, 93, 58, 0.22);
+		--st-warn: #b07d1f;
+		--st-warn-bg: #f6eed8;
+		--st-warn-tint: rgba(176, 125, 31, 0.24);
+		--st-easy: #566a86;
+		--st-easy-bg: #eaedf3;
+		--st-easy-tint: rgba(86, 106, 134, 0.22);
+		--st-bad: #9a4b2e;
+		--st-bad-bg: #f6e7df;
+		--st-bad-tint: rgba(154, 75, 46, 0.22);
+		--st-neutral: #7d7b6f;
+		--st-neutral-bg: #efece3;
+		--st-neutral-tint: rgba(125, 123, 111, 0.18);
 	}
 	:global(.oi-root[data-theme='dark']) {
 		--bg: #0d1a15;
@@ -230,6 +246,22 @@
 		--swim-soft: #1a3447;
 		--bike-soft: #3a3017;
 		--run-soft: #1d3025;
+		/* KPI indicator status tones (dark): brighter ink on low-chroma chips. */
+		--st-good: #4caf7e;
+		--st-good-bg: #17321f;
+		--st-good-tint: rgba(76, 175, 126, 0.2);
+		--st-warn: #e0b14e;
+		--st-warn-bg: #33291a;
+		--st-warn-tint: rgba(224, 177, 78, 0.2);
+		--st-easy: #8ba2c0;
+		--st-easy-bg: #1e2733;
+		--st-easy-tint: rgba(139, 162, 192, 0.2);
+		--st-bad: #d98a6a;
+		--st-bad-bg: #33211a;
+		--st-bad-tint: rgba(217, 138, 106, 0.2);
+		--st-neutral: #8fa597;
+		--st-neutral-bg: #1c2b23;
+		--st-neutral-tint: rgba(143, 165, 151, 0.16);
 	}
 
 	.oi {
@@ -264,6 +296,8 @@
 		align-items: center;
 		gap: 9px;
 		margin-bottom: 24px;
+		text-decoration: none;
+		color: inherit;
 	}
 	.logo {
 		width: 30px;
@@ -480,7 +514,10 @@
 			line-height: 1;
 		}
 		.oi-main {
-			padding: 16px 16px calc(82px + env(safe-area-inset-bottom, 0px));
+			/* Top inset clears the translucent iOS status bar (black-translucent
+			   draws page content underneath it). */
+			padding: calc(16px + env(safe-area-inset-top, 0px)) 16px
+				calc(82px + env(safe-area-inset-bottom, 0px));
 			/* Allow momentum scroll on iOS. */
 			-webkit-overflow-scrolling: touch;
 			/* Safety net: nothing in the app should produce horizontal scroll

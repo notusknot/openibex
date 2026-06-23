@@ -34,6 +34,30 @@ export type DashboardKpis = {
 	strain: number;
 };
 
+// Self-explaining indicator for a KPI card ("Combination" / Option D in the
+// design): a one-word verdict plus a track showing where the value sits
+// relative to its ideal band. `tone` keys into the --st-* theme tokens so the
+// chip, marker, and shaded zone recolor with light/dark.
+export type KpiTone = 'good' | 'warn' | 'easy' | 'bad' | 'neutral';
+export type KpiIndicator = {
+	status: string; // verdict word, e.g. 'Fresh', 'Building', 'Overload'
+	tone: KpiTone;
+	markerPct: number; // 0–100, current value's position on the track
+	zoneStart: number; // 0–100, left edge of the ideal band
+	zoneWidth: number; // 0–100, width of the ideal band (0 = no band drawn)
+	lo: string; // left scale label
+	hi: string; // right scale label
+};
+
+export type DashboardIndicators = {
+	fitness: KpiIndicator;
+	fatigue: KpiIndicator;
+	form: KpiIndicator;
+	weekTss: KpiIndicator;
+	readiness: KpiIndicator;
+	monotony: KpiIndicator;
+};
+
 export type DashboardSeriesPoint = { i: number; ctl: number; atl: number; tsb: number; dateMs: number };
 
 export type DashboardWeek = {
@@ -50,6 +74,7 @@ export type DashboardPower = { label: string; val: number };
 
 export type DashboardData = {
 	kpis: DashboardKpis;
+	indicators: DashboardIndicators;
 	series: DashboardSeriesPoint[];
 	weeks: DashboardWeek[];
 	sport: { swimPct: number; bikePct: number; runPct: number };
@@ -81,6 +106,163 @@ function readinessLabel(v: number): string {
 	if (v >= 42) return 'Productive';
 	if (v >= 26) return 'Fatigued';
 	return 'Overreached';
+}
+
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+// Position of `v` on a [min,max] track, as a 0–100 percentage.
+const trackPct = (v: number, min: number, max: number) =>
+	max > min ? clamp(((v - min) / (max - min)) * 100, 0, 100) : 0;
+const round1 = (x: number) => Math.round(x * 10) / 10;
+
+const NEUTRAL_INDICATOR: KpiIndicator = {
+	status: '—',
+	tone: 'neutral',
+	markerPct: 0,
+	zoneStart: 0,
+	zoneWidth: 0,
+	lo: '',
+	hi: ''
+};
+
+// Derives the self-explaining indicator for each KPI from its live value. These
+// bands are coaching heuristics (CTL/ATL ratios, TSB ranges, monotony cutoffs),
+// not hard rules — tune them here. Several metrics are scaled relative to the
+// athlete's own fitness (CTL) since "ideal" fatigue and weekly load depend on it.
+function buildKpiIndicators(args: {
+	ctl: number;
+	atl: number;
+	tsb: number;
+	weekTss: number;
+	rampN: number;
+	readinessVal: number;
+	readinessLabel: string;
+	monotonyN: number;
+	hasData: boolean;
+}): DashboardIndicators {
+	const { ctl, atl, tsb, weekTss, rampN, readinessVal, monotonyN, hasData } = args;
+
+	if (!hasData) {
+		return {
+			fitness: NEUTRAL_INDICATOR,
+			fatigue: NEUTRAL_INDICATOR,
+			form: NEUTRAL_INDICATOR,
+			weekTss: NEUTRAL_INDICATOR,
+			readiness: NEUTRAL_INDICATOR,
+			monotony: NEUTRAL_INDICATOR
+		};
+	}
+
+	const ref = Math.max(ctl, 1); // fitness reference for ratio-based bands
+
+	// Fitness (CTL): higher is better, but the actionable signal is the build
+	// rate (ramp). Marker is the value; the band is a sustainable-build target.
+	const fitMax = Math.max(60, Math.ceil((ctl * 1.3) / 10) * 10);
+	const fitness: KpiIndicator = {
+		...(rampN >= 8
+			? { status: 'Spiking', tone: 'warn' as KpiTone }
+			: rampN >= 3
+				? { status: 'Building', tone: 'good' as KpiTone }
+				: rampN > -2
+					? { status: 'Steady', tone: 'good' as KpiTone }
+					: rampN > -6
+						? { status: 'Easing', tone: 'easy' as KpiTone }
+						: { status: 'Detraining', tone: 'warn' as KpiTone }),
+		markerPct: round1(trackPct(ctl, 0, fitMax)),
+		zoneStart: 50,
+		zoneWidth: 35,
+		lo: '0',
+		hi: String(fitMax)
+	};
+
+	// Fatigue (ATL): meaningful relative to fitness. ATL ≈ CTL is normal training
+	// load; well above means accumulating fatigue, well below means freshened up.
+	const fatMax = Math.max(50, Math.ceil((ref * 1.8) / 10) * 10);
+	const fatRatio = atl / ref;
+	const fatZoneStart = trackPct(0.7 * ref, 0, fatMax);
+	const fatigue: KpiIndicator = {
+		...(fatRatio < 0.7
+			? { status: 'Low', tone: 'good' as KpiTone }
+			: fatRatio <= 1.1
+				? { status: 'Normal', tone: 'good' as KpiTone }
+				: fatRatio <= 1.4
+					? { status: 'High', tone: 'warn' as KpiTone }
+					: { status: 'Very high', tone: 'bad' as KpiTone }),
+		markerPct: round1(trackPct(atl, 0, fatMax)),
+		zoneStart: round1(fatZoneStart),
+		zoneWidth: round1(trackPct(1.1 * ref, 0, fatMax) - fatZoneStart),
+		lo: '0',
+		hi: String(fatMax)
+	};
+
+	// Form (TSB): the band-shaped metric. Below 0 = carrying fatigue (normal in a
+	// build); a moderate positive band is fresh/productive; very high = detraining.
+	const form: KpiIndicator = {
+		...(tsb > 20
+			? { status: 'Peaked', tone: 'easy' as KpiTone }
+			: tsb >= 8
+				? { status: 'Fresh', tone: 'good' as KpiTone }
+				: tsb >= -10
+					? { status: 'Balanced', tone: 'good' as KpiTone }
+					: tsb >= -25
+						? { status: 'Fatigued', tone: 'warn' as KpiTone }
+						: { status: 'Overreached', tone: 'bad' as KpiTone }),
+		markerPct: round1(trackPct(tsb, -30, 30)),
+		zoneStart: round1(trackPct(-10, -30, 30)),
+		zoneWidth: round1(trackPct(10, -30, 30) - trackPct(-10, -30, 30)),
+		lo: '−30',
+		hi: '+30'
+	};
+
+	// Week TSS: judged against a sustainable weekly load (≈ CTL × 7). Easing below
+	// it, productive around it, overload well above.
+	const sustainable = ref * 7;
+	const wkMax = Math.max(300, Math.ceil((sustainable * 1.6) / 50) * 50);
+	const wkRatio = weekTss / sustainable;
+	const wkZoneStart = trackPct(0.8 * sustainable, 0, wkMax);
+	const weekTssInd: KpiIndicator = {
+		...(wkRatio < 0.6
+			? { status: 'Easing', tone: 'easy' as KpiTone }
+			: wkRatio <= 1.3
+				? { status: 'On track', tone: 'good' as KpiTone }
+				: wkRatio <= 1.6
+					? { status: 'Loading', tone: 'warn' as KpiTone }
+					: { status: 'Overload', tone: 'bad' as KpiTone }),
+		markerPct: round1(trackPct(weekTss, 0, wkMax)),
+		zoneStart: round1(wkZoneStart),
+		zoneWidth: round1(trackPct(1.3 * sustainable, 0, wkMax) - wkZoneStart),
+		lo: '0',
+		hi: String(wkMax)
+	};
+
+	// Readiness (0–100): derived from TSB, higher = fresher. Reuse the word verdict.
+	const readiness: KpiIndicator = {
+		status: args.readinessLabel,
+		tone: readinessVal >= 42 ? 'good' : readinessVal >= 26 ? 'warn' : 'bad',
+		markerPct: round1(trackPct(readinessVal, 0, 100)),
+		zoneStart: 55,
+		zoneWidth: 33,
+		lo: '0',
+		hi: '100'
+	};
+
+	// Monotony: lower is more varied (healthier). The ideal band is the low end;
+	// above ~2 every day looks the same, which raises strain/illness risk.
+	const monotony: KpiIndicator = Number.isFinite(monotonyN)
+		? {
+				...(monotonyN < 1.5
+					? { status: 'Varied', tone: 'good' as KpiTone }
+					: monotonyN < 2
+						? { status: 'Moderate', tone: 'warn' as KpiTone }
+						: { status: 'Monotonous', tone: 'bad' as KpiTone }),
+				markerPct: round1(trackPct(monotonyN, 0, 2.5)),
+				zoneStart: 0,
+				zoneWidth: 60,
+				lo: '0',
+				hi: '2.5'
+			}
+		: NEUTRAL_INDICATOR;
+
+	return { fitness, fatigue, form, weekTss: weekTssInd, readiness, monotony };
 }
 
 export async function getDashboardData(
@@ -165,6 +347,18 @@ export async function getDashboardData(
 		strain: strainN
 	};
 
+	const indicators = buildKpiIndicators({
+		ctl: last.ctl,
+		atl: last.atl,
+		tsb: last.tsb,
+		weekTss,
+		rampN,
+		readinessVal,
+		readinessLabel: kpis.readinessLabel,
+		monotonyN,
+		hasData: windowActivities.length > 0
+	});
+
 	const weeks: DashboardWeek[] = [];
 	const weekCount = Math.floor(days / 7);
 	for (let w = 0; w < weekCount; w++) {
@@ -223,6 +417,7 @@ export async function getDashboardData(
 
 	return {
 		kpis,
+		indicators,
 		series,
 		weeks,
 		sport,
