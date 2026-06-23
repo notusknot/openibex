@@ -123,6 +123,14 @@
 		--run: #3c7a53;
 		--btn: #ffffff;
 		--btn-ink: #5a6b5e;
+		--bg-soft: #faf8f3;
+		--bg-emphasis: #f1f7f3;
+		--overlay: rgba(19, 40, 32, 0.42);
+		--danger: #a3402e;
+		--danger-bg: #f7e9e5;
+		--swim-soft: #eaf2f7;
+		--bike-soft: #f8f0dd;
+		--run-soft: #e8f1ec;
 	}
 	:global(.oi-root[data-theme='dark']) {
 		--bg: #0d1a15;
@@ -154,6 +162,14 @@
 		--run: #54a574;
 		--btn: #1b2a22;
 		--btn-ink: #aebfb4;
+		--bg-soft: #11201a;
+		--bg-emphasis: #173829;
+		--overlay: rgba(0, 0, 0, 0.6);
+		--danger: #ef8779;
+		--danger-bg: #2a1814;
+		--swim-soft: #1a3447;
+		--bike-soft: #3a3017;
+		--run-soft: #1d3025;
 	}
 
 	.oi {

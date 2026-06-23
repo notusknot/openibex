@@ -1,37 +1,10 @@
-import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { fail, redirect } from '@sveltejs/kit';
 
-import { sports, type Sport } from '$lib/server/db/schema';
-import { listPlannedWorkouts } from '$lib/server/services/plannedWorkoutsService';
-import { monthEndDate, monthStartDate, parseMonthParam } from '$lib/validation/localDate';
-import { parseSport } from '$lib/validation/plannedWorkout';
-import { listActivitiesForUserInTimeRange } from '$lib/server/repositories/activitiesRepository';
-import { ensureAutoMatchesForRange } from '$lib/server/services/workoutMatchingService';
-import { listWorkoutLinksForPlannedWorkouts } from '$lib/server/repositories/workoutLinksRepository';
-
-type CalendarDay = {
-	date: string;
-	dayOfMonth: number;
-	planned: Array<{
-		id: string;
-		title: string;
-		sport: Sport;
-		match?: {
-			activityId: string;
-			matchType: string;
-			durationCompliance: number | null;
-			distanceCompliance: number | null;
-			loadCompliance: number | null;
-		};
-	}>;
-	completed: Array<{ id: string; title: string; sport: Sport }>;
-};
-
-type CalendarCell = { kind: 'empty' } | { kind: 'day'; day: CalendarDay };
-
-function toMonthParam(year: number, month: number): string {
-	return `${String(year)}-${String(month).padStart(2, '0')}`;
-}
+import { getCalendarMonth } from '$lib/server/services/calendarMonthService';
+import { createPlannedWorkoutForUser } from '$lib/server/services/plannedWorkoutsService';
+import { parseMonthParam } from '$lib/validation/localDate';
+import { parsePlannedWorkoutForm } from '$lib/validation/plannedWorkout';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) throw redirect(303, '/login');
@@ -42,101 +15,55 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const year = parsed.ok ? parsed.year : now.getFullYear();
 	const month = parsed.ok ? parsed.month : now.getMonth() + 1;
 
-	const sportParam = url.searchParams.get('sport') ?? '';
-	const sport = sportParam ? parseSport(sportParam) : null;
-
-	const fromDate = monthStartDate(year, month);
-	const toDate = monthEndDate(year, month);
-
-	const planned = await listPlannedWorkouts({
+	const calendar = await getCalendarMonth({
 		userId: locals.user.id,
-		fromDate,
-		toDate,
-		sport: sport ?? undefined
+		year,
+		month,
+		now
 	});
 
-	const fromTs = new Date(`${fromDate}T00:00:00`);
-	const toTs = new Date(`${toDate}T23:59:59.999`);
-	const completedAll = await listActivitiesForUserInTimeRange({ userId: locals.user.id, from: fromTs, to: toTs });
-	const completed = sport ? completedAll.filter((a) => a.sport === sport) : completedAll;
+	return { calendar };
+};
 
-	await ensureAutoMatchesForRange({
-		userId: locals.user.id,
-		fromDate,
-		toDate,
-		sport: sport ?? undefined
-	});
+const MONTH_RE = /^\d{4}-\d{2}$/;
 
-	const links = await listWorkoutLinksForPlannedWorkouts(
-		locals.user.id,
-		planned.map((p) => p.id)
-	);
-	const linkByPlanned = new Map(links.map((l) => [l.plannedWorkoutId, l]));
+export const actions: Actions = {
+	createPlanned: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
 
-	const plannedByDate = new Map<string, CalendarDay['planned']>();
-	for (const p of planned) {
-		const list = plannedByDate.get(p.scheduledDate) ?? [];
-		const link = linkByPlanned.get(p.id);
-		list.push({
-			id: p.id,
-			title: p.title,
-			sport: p.sport,
-			match: link
-				? {
-						activityId: link.activityId,
-						matchType: link.matchType,
-						durationCompliance: link.durationCompliance ?? null,
-						distanceCompliance: link.distanceCompliance ?? null,
-						loadCompliance: link.loadCompliance ?? null
-					}
-				: undefined
+		const monthParam = String(form.get('month') ?? '').trim();
+		if (!MONTH_RE.test(monthParam)) {
+			return fail(400, { error: 'Invalid month.' });
+		}
+		const dayRaw = String(form.get('day') ?? '').trim();
+		const day = Number(dayRaw);
+		if (!Number.isFinite(day) || day < 1 || day > 31) {
+			return fail(400, { error: 'Pick a day between 1 and 31.' });
+		}
+		const scheduledDate = `${monthParam}-${String(day).padStart(2, '0')}`;
+		// Verify the date actually exists in that month (e.g. reject day=31 in Feb).
+		const [yearStr, monthStr] = monthParam.split('-');
+		const year = Number(yearStr);
+		const monthN = Number(monthStr);
+		const daysInMonth = new Date(year, monthN, 0).getDate();
+		if (day > daysInMonth) {
+			return fail(400, { error: `${monthParam} only has ${daysInMonth} days.` });
+		}
+
+		// Reshape modal fields into the schema the shared helper expects.
+		form.set('scheduledDate', scheduledDate);
+		const tss = form.get('tss');
+		if (tss !== null) form.set('plannedLoad', String(tss));
+
+		const parsedForm = parsePlannedWorkoutForm(form);
+		if (!parsedForm.ok) return fail(400, { error: parsedForm.message });
+
+		await createPlannedWorkoutForUser({
+			userId: locals.user.id,
+			...parsedForm.value
 		});
-		plannedByDate.set(p.scheduledDate, list);
+
+		throw redirect(303, `/calendar?month=${monthParam}`);
 	}
-
-	const completedByDate = new Map<string, CalendarDay['completed']>();
-	for (const a of completed) {
-		const d = new Date(a.startTime);
-		const date = `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-		const list = completedByDate.get(date) ?? [];
-		list.push({ id: a.id, title: a.title, sport: a.sport });
-		completedByDate.set(date, list);
-	}
-
-	const daysInMonth = new Date(year, month, 0).getDate();
-	const days: CalendarDay[] = [];
-	for (let d = 1; d <= daysInMonth; d++) {
-		const date = `${String(year)}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-		days.push({
-			date,
-			dayOfMonth: d,
-			planned: plannedByDate.get(date) ?? [],
-			completed: completedByDate.get(date) ?? []
-		});
-	}
-
-	const hasAny = planned.length > 0 || completed.length > 0;
-
-	const firstDayJs = new Date(year, month - 1, 1).getDay(); // 0=Sun..6=Sat
-	const firstDayMon0 = (firstDayJs + 6) % 7; // 0=Mon..6=Sun
-	const cells: CalendarCell[] = [];
-	for (let i = 0; i < firstDayMon0; i++) cells.push({ kind: 'empty' });
-	for (const day of days) cells.push({ kind: 'day', day });
-
-	const prevMonth = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
-	const nextMonth = month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
-
-	return {
-		month: { year, month, param: toMonthParam(year, month) },
-		nav: {
-			prev: toMonthParam(prevMonth.year, prevMonth.month),
-			next: toMonthParam(nextMonth.year, nextMonth.month)
-		},
-		filter: {
-			sport: sport ?? null
-		},
-		sports,
-		cells,
-		hasAny
-	};
 };
