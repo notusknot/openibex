@@ -27,7 +27,7 @@ importers:
         specifier: ^1.11.0
         version: 1.21.0
       garmin-connect:
-        specifier: ^1.6.2
+        specifier: 1.6.2
         version: 1.6.2
       jszip:
         specifier: ^3.10.1
