@@ -2,6 +2,27 @@ import type { Sport } from '$lib/server/db/schema';
 
 const PARSER_VERSION = 'fit-file-parser';
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Garmin's recent export names every .fit `<email>_<id>.fit`; older ones used
+// `<id>_ACTIVITY.fit`. Treat those as filler — the parsed sport + start date is
+// a much better human-readable title than the raw filename.
+export function composeFallbackTitle(input: {
+	originalFilename: string;
+	sport: Sport;
+	startTime: Date;
+}): string {
+	const base = input.originalFilename.replace(/\.[^/.]+$/, '').trim();
+	const nonMeaningful =
+		base.length === 0 ||
+		base.includes('@') ||
+		/^[0-9]+$/.test(base) ||
+		/^[0-9]+_ACTIVITY$/i.test(base);
+	if (!nonMeaningful) return base;
+	const d = input.startTime;
+	return `${input.sport} · ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 function mapSport(raw: unknown): Sport {
 	const s = String(raw ?? '').toLowerCase();
 	if (s.includes('run')) return 'Run';
@@ -81,8 +102,7 @@ export async function parseFit(buffer: Uint8Array, originalFilename: string): Pr
 	const avgCadence = coerceNumber(session?.avg_cadence ?? session?.avgCadence) ?? null;
 	const calories = coerceNumber(session?.total_calories ?? session?.totalCalories) ?? null;
 
-	const baseTitle = originalFilename.replace(/\.[^/.]+$/, '').trim();
-	const title = baseTitle.length > 0 ? baseTitle : `${sport} activity`;
+	const title = composeFallbackTitle({ originalFilename, sport, startTime });
 
 	const stream = {
 		records: fitData?.records ?? null,

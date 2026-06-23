@@ -24,7 +24,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "import:garmin": "tsx scripts/import-garmin.ts",
-    "analytics:rebuild": "tsx scripts/rebuild-daily-metrics.ts"
+    "analytics:rebuild": "tsx scripts/rebuild-daily-metrics.ts",
+    "titles:backfill": "tsx scripts/backfill-activity-titles.ts"
   },
   "dependencies": {
     "@sveltejs/adapter-node": "^2.0.0",

@@ -17,6 +17,10 @@ import {
 	findGarminUploadedFilesRoot,
 	type DiscoveredFile
 } from '$lib/server/services/imports/discovery';
+import {
+	loadGarminMetadata,
+	resolveNameByFingerprint
+} from '$lib/server/services/imports/garminMetadata';
 
 export type GarminImportSummary = {
 	batchId: string;
@@ -105,6 +109,7 @@ export async function importGarminHistoricalExport(input: {
 
 	try {
 		const uploadedRoot = await findGarminUploadedFilesRoot(input.path);
+		const metadataLookup = await loadGarminMetadata(input.path);
 		const discovered = await discoverCandidateFiles(uploadedRoot);
 		const expanded = await expandZipsToTemp(discovered, batchId);
 
@@ -234,6 +239,11 @@ export async function importGarminHistoricalExport(input: {
 				}
 
 				const parsed = await parseFit(bytes, c.originalFilename);
+				const metaName = resolveNameByFingerprint(metadataLookup, {
+					sport: parsed.summary.sport,
+					startTime: parsed.summary.startTime
+				});
+				if (metaName) parsed.summary.title = metaName;
 
 				// Dedup 3: fallback fingerprint (only after parsing).
 				const existingByFingerprint = await getActivityByFingerprintForUser({
