@@ -1,10 +1,14 @@
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
-import { activities, type Sport } from '$lib/server/db/schema';
+import { activities, activityFiles, type Sport } from '$lib/server/db/schema';
+import {
+	activityFileValues,
+	type CreateActivityFileInput
+} from '$lib/server/repositories/activityFilesRepository';
 
 export type DbActivity = typeof activities.$inferSelect;
 
-export async function createActivity(input: {
+export type CreateActivityInput = {
 	id: string;
 	userId: string;
 	activityFileId: string | null;
@@ -32,42 +36,66 @@ export async function createActivity(input: {
 	loadScore?: number | null;
 	streamPath?: string | null;
 	parserVersion?: string | null;
-}): Promise<void> {
-	const db = getDb();
+};
+
+/** Build the insert row (applies null defaults + timestamps). Shared so the
+ * atomic import commit inserts the exact same shape inside a transaction. */
+export function activityValues(input: CreateActivityInput) {
 	const now = new Date();
-	db.insert(activities)
-		.values({
-			id: input.id,
-			userId: input.userId,
-			activityFileId: input.activityFileId,
-			source: input.source ?? null,
-			sourceActivityId: input.sourceActivityId ?? null,
-			sourceFileSha256: input.sourceFileSha256 ?? null,
-			sourceFilename: input.sourceFilename ?? null,
-			importedAt: input.importedAt ?? null,
-			sport: input.sport,
-			title: input.title,
-			description: input.description ?? null,
-			startTime: input.startTime,
-			timezone: input.timezone ?? null,
-			durationSec: input.durationSec ?? null,
-			movingTimeSec: input.movingTimeSec ?? null,
-			distanceM: input.distanceM ?? null,
-			elevationGainM: input.elevationGainM ?? null,
-			avgHr: input.avgHr ?? null,
-			maxHr: input.maxHr ?? null,
-			avgPowerW: input.avgPowerW ?? null,
-			maxPowerW: input.maxPowerW ?? null,
-			normalizedPowerLikeW: input.normalizedPowerLikeW ?? null,
-			avgCadence: input.avgCadence ?? null,
-			calories: input.calories ?? null,
-			loadScore: input.loadScore ?? null,
-			streamPath: input.streamPath ?? null,
-			parserVersion: input.parserVersion ?? null,
-			createdAt: now,
-			updatedAt: now
-		})
-		.run();
+	return {
+		id: input.id,
+		userId: input.userId,
+		activityFileId: input.activityFileId,
+		source: input.source ?? null,
+		sourceActivityId: input.sourceActivityId ?? null,
+		sourceFileSha256: input.sourceFileSha256 ?? null,
+		sourceFilename: input.sourceFilename ?? null,
+		importedAt: input.importedAt ?? null,
+		sport: input.sport,
+		title: input.title,
+		description: input.description ?? null,
+		startTime: input.startTime,
+		timezone: input.timezone ?? null,
+		durationSec: input.durationSec ?? null,
+		movingTimeSec: input.movingTimeSec ?? null,
+		distanceM: input.distanceM ?? null,
+		elevationGainM: input.elevationGainM ?? null,
+		avgHr: input.avgHr ?? null,
+		maxHr: input.maxHr ?? null,
+		avgPowerW: input.avgPowerW ?? null,
+		maxPowerW: input.maxPowerW ?? null,
+		normalizedPowerLikeW: input.normalizedPowerLikeW ?? null,
+		avgCadence: input.avgCadence ?? null,
+		calories: input.calories ?? null,
+		loadScore: input.loadScore ?? null,
+		streamPath: input.streamPath ?? null,
+		parserVersion: input.parserVersion ?? null,
+		createdAt: now,
+		updatedAt: now
+	};
+}
+
+export async function createActivity(input: CreateActivityInput): Promise<void> {
+	getDb().insert(activities).values(activityValues(input)).run();
+}
+
+/**
+ * Insert an activity and its backing file atomically. better-sqlite3
+ * transactions are synchronous, so the two inserts commit together or not at
+ * all — a crash mid-import can no longer leave an orphan activity_file row (with
+ * no activity) that would also wrongly block a dedup-retry. Filesystem writes
+ * (the FIT original + the stream blob) must happen BEFORE this call, not inside
+ * the transaction.
+ */
+export function commitActivityWithFile(input: {
+	file: CreateActivityFileInput;
+	activity: CreateActivityInput;
+}): void {
+	const db = getDb();
+	db.transaction((tx) => {
+		tx.insert(activityFiles).values(activityFileValues(input.file)).run();
+		tx.insert(activities).values(activityValues(input.activity)).run();
+	});
 }
 
 export async function getActivityByIdForUser(id: string, userId: string): Promise<DbActivity | undefined> {

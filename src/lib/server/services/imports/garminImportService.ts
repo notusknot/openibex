@@ -5,8 +5,8 @@ import zlib from 'node:zlib';
 
 import { getEnv } from '$lib/server/env';
 import { FitNotAnActivityError, parseFit } from '$lib/server/parsers/fit/fitParser';
-import { createActivity, getActivityByFingerprintForUser, getActivityBySourceActivityIdForUser, getActivityBySourceFileShaForUser } from '$lib/server/repositories/activitiesRepository';
-import { createActivityFile, getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
+import { commitActivityWithFile, getActivityByFingerprintForUser, getActivityBySourceActivityIdForUser, getActivityBySourceFileShaForUser } from '$lib/server/repositories/activitiesRepository';
+import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
 import { getUserByEmail } from '$lib/server/repositories/usersRepository';
@@ -282,45 +282,49 @@ export async function importGarminHistoricalExport(input: {
 				}
 
 				const activityFileId = crypto.randomUUID();
-				await createActivityFile({
-					id: activityFileId,
-					userId: user.id,
-					originalFilename: c.originalFilename,
-					filePath: relOriginal,
-					fileType: 'fit',
-					sha256: c.sha256,
-					sizeBytes: c.sizeBytes,
-					uploadedAt: new Date()
-				});
-
 				const activityId = crypto.randomUUID();
 				const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
 				const stream = await writeStreamBlob({ activityId, gzipBytes });
 
-				await createActivity({
-					id: activityId,
-					userId: user.id,
-					activityFileId,
-					source: 'garmin-export',
-					sourceActivityId: c.sourceActivityId,
-					sourceFileSha256: c.sha256,
-					sourceFilename: c.originalFilename,
-					importedAt: new Date(),
-					sport: parsed.summary.sport,
-					title: parsed.summary.title,
-					startTime: parsed.summary.startTime,
-					durationSec: parsed.summary.durationSec,
-					movingTimeSec: parsed.summary.movingTimeSec,
-					distanceM: parsed.summary.distanceM,
-					elevationGainM: parsed.summary.elevationGainM,
-					avgHr: parsed.summary.avgHr,
-					maxHr: parsed.summary.maxHr,
-					avgPowerW: parsed.summary.avgPowerW,
-					maxPowerW: parsed.summary.maxPowerW,
-					avgCadence: parsed.summary.avgCadence,
-					calories: parsed.summary.calories,
-					streamPath: stream.relativePath,
-					parserVersion: parsed.parserVersion
+				// Atomic: the activity_file + activity rows commit together, so a
+				// crash can't leave an orphan file row. The stream blob (and the
+				// original FIT) were written to disk above, outside the transaction.
+				commitActivityWithFile({
+					file: {
+						id: activityFileId,
+						userId: user.id,
+						originalFilename: c.originalFilename,
+						filePath: relOriginal,
+						fileType: 'fit',
+						sha256: c.sha256,
+						sizeBytes: c.sizeBytes,
+						uploadedAt: new Date()
+					},
+					activity: {
+						id: activityId,
+						userId: user.id,
+						activityFileId,
+						source: 'garmin-export',
+						sourceActivityId: c.sourceActivityId,
+						sourceFileSha256: c.sha256,
+						sourceFilename: c.originalFilename,
+						importedAt: new Date(),
+						sport: parsed.summary.sport,
+						title: parsed.summary.title,
+						startTime: parsed.summary.startTime,
+						durationSec: parsed.summary.durationSec,
+						movingTimeSec: parsed.summary.movingTimeSec,
+						distanceM: parsed.summary.distanceM,
+						elevationGainM: parsed.summary.elevationGainM,
+						avgHr: parsed.summary.avgHr,
+						maxHr: parsed.summary.maxHr,
+						avgPowerW: parsed.summary.avgPowerW,
+						maxPowerW: parsed.summary.maxPowerW,
+						avgCadence: parsed.summary.avgCadence,
+						calories: parsed.summary.calories,
+						streamPath: stream.relativePath,
+						parserVersion: parsed.parserVersion
+					}
 				});
 
 				importedCount += 1;

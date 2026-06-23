@@ -22,7 +22,7 @@ export async function getActivityFileByShaForUser(sha256: string, userId: string
 		.get();
 }
 
-export async function createActivityFile(input: {
+export type CreateActivityFileInput = {
 	id: string;
 	userId: string;
 	originalFilename: string;
@@ -31,20 +31,25 @@ export async function createActivityFile(input: {
 	sha256: string;
 	sizeBytes: number;
 	uploadedAt: Date;
-}): Promise<void> {
-	const db = getDb();
-	db.insert(activityFiles)
-		.values({
-			id: input.id,
-			userId: input.userId,
-			originalFilename: input.originalFilename,
-			filePath: input.filePath,
-			fileType: input.fileType,
-			sha256: input.sha256,
-			sizeBytes: input.sizeBytes,
-			uploadedAt: input.uploadedAt
-		})
-		.run();
+};
+
+/** Build the insert row. Shared so the atomic import commit (commitActivityWithFile)
+ * inserts the exact same shape inside a transaction. */
+export function activityFileValues(input: CreateActivityFileInput) {
+	return {
+		id: input.id,
+		userId: input.userId,
+		originalFilename: input.originalFilename,
+		filePath: input.filePath,
+		fileType: input.fileType,
+		sha256: input.sha256,
+		sizeBytes: input.sizeBytes,
+		uploadedAt: input.uploadedAt
+	};
+}
+
+export async function createActivityFile(input: CreateActivityFileInput): Promise<void> {
+	getDb().insert(activityFiles).values(activityFileValues(input)).run();
 }
 
 export async function deleteActivityFileForUser(input: { id: string; userId: string }): Promise<void> {

@@ -12,12 +12,12 @@ import {
 } from '$lib/server/sync/garmin';
 import { FitNotAnActivityError, parseFit } from '$lib/server/parsers/fit/fitParser';
 import {
-	createActivity,
+	commitActivityWithFile,
 	getActivityByFingerprintForUser,
 	getActivityBySourceActivityIdForUser,
 	getActivityBySourceFileShaForUser
 } from '$lib/server/repositories/activitiesRepository';
-import { createActivityFile, getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
+import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
 import {
 	getGarminCredentialForUser,
 	updateGarminSyncStatus,
@@ -340,45 +340,49 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 				}
 
 				const activityFileId = crypto.randomUUID();
-				await createActivityFile({
-					id: activityFileId,
-					userId,
-					originalFilename: filename,
-					filePath: stored.relativePath,
-					fileType: 'fit',
-					sha256,
-					sizeBytes: stored.sizeBytes,
-					uploadedAt: new Date()
-				});
-
 				const activityId = crypto.randomUUID();
 				const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
 				const stream = await writeStreamBlob({ activityId, gzipBytes });
 
-				await createActivity({
-					id: activityId,
-					userId,
-					activityFileId,
-					source: GARMIN_SYNC_SOURCE,
-					sourceActivityId,
-					sourceFileSha256: sha256,
-					sourceFilename: filename,
-					importedAt: new Date(),
-					sport: parsed.summary.sport,
-					title: parsed.summary.title,
-					startTime: parsed.summary.startTime,
-					durationSec: parsed.summary.durationSec,
-					movingTimeSec: parsed.summary.movingTimeSec,
-					distanceM: parsed.summary.distanceM,
-					elevationGainM: parsed.summary.elevationGainM,
-					avgHr: parsed.summary.avgHr,
-					maxHr: parsed.summary.maxHr,
-					avgPowerW: parsed.summary.avgPowerW,
-					maxPowerW: parsed.summary.maxPowerW,
-					avgCadence: parsed.summary.avgCadence,
-					calories: parsed.summary.calories,
-					streamPath: stream.relativePath,
-					parserVersion: parsed.parserVersion
+				// Atomic: the activity_file + activity rows commit together, so a
+				// crash mid-write can't leave an orphan file row. The FIT original
+				// and the stream blob were already written to disk above.
+				commitActivityWithFile({
+					file: {
+						id: activityFileId,
+						userId,
+						originalFilename: filename,
+						filePath: stored.relativePath,
+						fileType: 'fit',
+						sha256,
+						sizeBytes: stored.sizeBytes,
+						uploadedAt: new Date()
+					},
+					activity: {
+						id: activityId,
+						userId,
+						activityFileId,
+						source: GARMIN_SYNC_SOURCE,
+						sourceActivityId,
+						sourceFileSha256: sha256,
+						sourceFilename: filename,
+						importedAt: new Date(),
+						sport: parsed.summary.sport,
+						title: parsed.summary.title,
+						startTime: parsed.summary.startTime,
+						durationSec: parsed.summary.durationSec,
+						movingTimeSec: parsed.summary.movingTimeSec,
+						distanceM: parsed.summary.distanceM,
+						elevationGainM: parsed.summary.elevationGainM,
+						avgHr: parsed.summary.avgHr,
+						maxHr: parsed.summary.maxHr,
+						avgPowerW: parsed.summary.avgPowerW,
+						maxPowerW: parsed.summary.maxPowerW,
+						avgCadence: parsed.summary.avgCadence,
+						calories: parsed.summary.calories,
+						streamPath: stream.relativePath,
+						parserVersion: parsed.parserVersion
+					}
 				});
 
 				imported++;

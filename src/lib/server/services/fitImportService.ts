@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 
-import { createActivity } from '$lib/server/repositories/activitiesRepository';
-import { createActivityFile, getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
-import { createImportJob, updateImportJobStatus } from '$lib/server/repositories/importJobsRepository';
+import { commitActivityWithFile } from '$lib/server/repositories/activitiesRepository';
+import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
+import { createImportJob } from '$lib/server/repositories/importJobsRepository';
 import { parseFit } from '$lib/server/parsers/fit/fitParser';
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
@@ -37,53 +37,37 @@ export async function importFitUpload(input: {
 	const importJobId = crypto.randomUUID();
 	const activityId = crypto.randomUUID();
 
-	const upload = await writeUploadFile({
-		userId: input.userId,
-		sha256,
-		ext: 'fit',
-		bytes: input.bytes
-	});
+	// Filesystem writes happen first, OUTSIDE the DB transaction (better-sqlite3
+	// transactions are synchronous and can't await). A crash here leaves only
+	// orphaned blobs on disk, which dedup-by-sha makes harmless on retry; a parse
+	// failure throws before any DB row exists, so the upload stays retryable
+	// (previously a half-written activity_file row blocked re-uploading the file).
+	const upload = await writeUploadFile({ userId: input.userId, sha256, ext: 'fit', bytes: input.bytes });
 
+	const parsed = await parseFit(input.bytes, input.originalFilename);
+	const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
+	const stream = await writeStreamBlob({ activityId, gzipBytes });
+
+	const title = composeSmartTitle({
+		metadataLookup: null,
+		sport: parsed.summary.sport,
+		startTime: parsed.summary.startTime
+	});
 	const now = new Date();
-	await createActivityFile({
-		id: activityFileId,
-		userId: input.userId,
-		originalFilename: input.originalFilename,
-		filePath: upload.relativePath,
-		fileType: 'fit',
-		sha256,
-		sizeBytes,
-		uploadedAt: now
-	});
 
-	await createImportJob({
-		id: importJobId,
-		userId: input.userId,
-		activityFileId,
-		status: 'processing',
-		createdAt: now,
-		updatedAt: now
-	});
-
-	try {
-		await updateImportJobStatus({
-			id: importJobId,
+	// Atomic: the activity_file and activity rows commit together or not at all.
+	commitActivityWithFile({
+		file: {
+			id: activityFileId,
 			userId: input.userId,
-			status: 'processing',
-			startedAt: now
-		});
-
-		const parsed = await parseFit(input.bytes, input.originalFilename);
-		const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
-		const stream = await writeStreamBlob({ activityId, gzipBytes });
-
-		const title = composeSmartTitle({
-			metadataLookup: null,
-			sport: parsed.summary.sport,
-			startTime: parsed.summary.startTime
-		});
-
-		await createActivity({
+			originalFilename: input.originalFilename,
+			filePath: upload.relativePath,
+			fileType: 'fit',
+			sha256,
+			sizeBytes,
+			uploadedAt: now
+		},
+		activity: {
 			id: activityId,
 			userId: input.userId,
 			activityFileId,
@@ -102,26 +86,19 @@ export async function importFitUpload(input: {
 			calories: parsed.summary.calories,
 			streamPath: stream.relativePath,
 			parserVersion: parsed.parserVersion
-		});
+		}
+	});
 
-		await updateImportJobStatus({
-			id: importJobId,
-			userId: input.userId,
-			status: 'succeeded',
-			completedAt: new Date()
-		});
+	// Job record for the import history (FK to activity_file is now satisfied).
+	await createImportJob({
+		id: importJobId,
+		userId: input.userId,
+		activityFileId,
+		status: 'succeeded',
+		createdAt: now,
+		updatedAt: now
+	});
 
-		return { activityId, activityFileId, importJobId };
-	} catch (err) {
-		const message = err instanceof Error ? err.message : 'Import failed.';
-		await updateImportJobStatus({
-			id: importJobId,
-			userId: input.userId,
-			status: 'failed',
-			errorMessage: message,
-			completedAt: new Date()
-		});
-		throw err;
-	}
+	return { activityId, activityFileId, importJobId };
 }
 
