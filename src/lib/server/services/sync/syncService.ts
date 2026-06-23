@@ -27,6 +27,7 @@ import { createImportBatch, updateImportBatchProgress } from '$lib/server/reposi
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
+import { beginCriticalWork, endCriticalWork, isShuttingDown } from '$lib/server/shutdown';
 
 export const GARMIN_SYNC_SOURCE = 'garmin-sync';
 
@@ -74,6 +75,7 @@ export function isUserSyncing(userId: string): boolean {
  * long-lived adapter-node server). Never throws — safe to `void` from a load. */
 export async function maybeTriggerAutoSync(userId: string, opts: SyncOptions = {}): Promise<void> {
 	try {
+		if (isShuttingDown()) return; // don't start new work while draining for shutdown
 		if (inFlight.has(userId)) return;
 		const last = lastAutoAttempt.get(userId) ?? 0;
 		if (Date.now() - last < AUTO_SYNC_INTERVAL_MS) return; // cheap throttle before any DB hit
@@ -121,12 +123,14 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 	const empty = { imported: 0, duplicate: 0, unsupported: 0, failed: 0 } as const;
 
 	if (inFlight.has(userId)) return { outcome: 'skipped', ...empty };
+	if (isShuttingDown()) return { outcome: 'skipped', ...empty };
 
 	const cred = await getGarminCredentialForUser(userId);
 	if (!cred) return { outcome: 'no_credential', ...empty };
 	if (!cred.syncEnabled) return { outcome: 'disabled', ...empty };
 
 	inFlight.add(userId);
+	beginCriticalWork(); // graceful shutdown drains this before checkpoint + close
 	const openSession = opts.openSession ?? openGarminSession;
 
 	const batchId = crypto.randomUUID();
@@ -360,5 +364,6 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 		return { outcome, imported, duplicate, unsupported, failed, batchId, error: message };
 	} finally {
 		inFlight.delete(userId);
+		endCriticalWork();
 	}
 }

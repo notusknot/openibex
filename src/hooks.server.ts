@@ -1,6 +1,11 @@
 import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
+import { registerShutdownHandlers } from '$lib/server/shutdown';
+
+// Runs once when the server module loads: drain in-flight writes + checkpoint
+// the WAL + close the DB cleanly on SIGTERM/SIGINT (Docker deploy/restart).
+registerShutdownHandlers();
 
 const PUBLIC_PREFIXES = [
 	'/api/health',

@@ -47,6 +47,23 @@ export function getDb() {
 	return db;
 }
 
+/**
+ * Fold the WAL back into the main db file and close the connection cleanly.
+ * Called by the graceful-shutdown handler on SIGTERM/SIGINT so a deploy or
+ * restart never truncates a write or leaves an un-checkpointed WAL behind.
+ * No-op if the connection was never opened. Idempotent.
+ */
+export function checkpointAndCloseDb(): void {
+	if (!sqlite) return;
+	try {
+		sqlite.pragma('wal_checkpoint(TRUNCATE)');
+	} finally {
+		sqlite.close();
+		sqlite = null;
+		db = null;
+	}
+}
+
 export function resetDbForTests(): void {
 	if (sqlite) {
 		sqlite.close();

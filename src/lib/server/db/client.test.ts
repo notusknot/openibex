@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
 
-import { getDb, resetDbForTests } from '$lib/server/db/client';
-import { sessions } from '$lib/server/db/schema';
+import { checkpointAndCloseDb, getDb, resetDbForTests } from '$lib/server/db/client';
+import { appMeta, sessions } from '$lib/server/db/schema';
 
 function setTestEnv(dataDir: string) {
 	process.env.OPENIBEX_ENV = 'test';
@@ -55,5 +55,25 @@ describe('sqlite connection pragmas', () => {
 		const dbPath = path.join(process.env.OPENIBEX_DATA_DIR!, 'openibex.db');
 		expect(fs.existsSync(`${dbPath}-wal`)).toBe(true);
 		expect(fs.existsSync(`${dbPath}-shm`)).toBe(true);
+	});
+
+	it('checkpointAndCloseDb folds the WAL, closes cleanly, and persists the write', () => {
+		const db = getDb();
+		db.insert(appMeta).values({ key: 'shutdown-test', value: 'ok', updatedAt: new Date() }).run();
+
+		expect(() => checkpointAndCloseDb()).not.toThrow();
+
+		const dbPath = path.join(process.env.OPENIBEX_DATA_DIR!, 'openibex.db');
+		const walPath = `${dbPath}-wal`;
+		// TRUNCATE checkpoint zeroes the WAL (or removes it) — the write is now
+		// folded into the main db file.
+		if (fs.existsSync(walPath)) expect(fs.statSync(walPath).size).toBe(0);
+
+		// Reopen: the connection was cleanly reset and the write survived.
+		const reopened = getDb();
+		const row = reopened.get(
+			sql`select value from app_meta where key = 'shutdown-test'`
+		) as { value: string };
+		expect(row.value).toBe('ok');
 	});
 });
