@@ -367,3 +367,25 @@ export const garminCredentials = sqliteTable(
 		userUnique: uniqueIndex('garmin_credentials_user_unique').on(t.userId)
 	})
 );
+
+export const syncJobStatuses = ['idle', 'running', 'failed'] as const;
+export type SyncJobStatus = (typeof syncJobStatuses)[number];
+
+// Durable sync throttle + lock, one row per user. Replaces the in-memory
+// throttle map / in-flight set that reset on restart and couldn't coordinate
+// across tabs or processes. The lock is claimed with a single atomic UPDATE and
+// auto-expires (stale-lock recovery) so a crashed process never locks a user
+// out permanently. See docs/stability-hardening-spec.md §3.
+export const syncJobs = sqliteTable('sync_jobs', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	// lock
+	status: text('status', { enum: syncJobStatuses }).notNull().default('idle'),
+	lockedAt: integer('locked_at', { mode: 'timestamp_ms' }),
+	lockedBy: text('locked_by'), // process/instance id, for debugging
+	// throttle / last-run record
+	lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
+	lastStatus: text('last_status'), // the SyncOutcome of the most recent run
+	lastError: text('last_error') // redacted message
+});

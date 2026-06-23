@@ -112,10 +112,12 @@ export const actions: Actions = {
 		return { garminDisconnected: true };
 	},
 
-	// Manual "Sync now" — runs synchronously and reports a summary.
+	// Manual "Sync now" — runs synchronously and reports a summary. Bypasses the
+	// throttle window (still respects the lock, so it won't collide with an
+	// in-flight auto-sync).
 	syncNow: async ({ locals }) => {
 		if (!locals.user) throw redirect(303, '/login');
-		const result = await syncForUser(locals.user.id);
+		const result = await syncForUser(locals.user.id, { ignoreThrottle: true });
 		if (result.outcome === 'auth_failed') {
 			return fail(400, { garminError: 'Garmin session expired or is invalid. Reconnect your account.' });
 		}

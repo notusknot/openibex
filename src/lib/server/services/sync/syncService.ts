@@ -28,6 +28,12 @@ import { createImportItem, updateImportItem } from '$lib/server/repositories/imp
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 import { beginCriticalWork, endCriticalWork, isShuttingDown } from '$lib/server/shutdown';
+import {
+	isSyncJobRunning,
+	releaseSyncJob,
+	tryAcquireSyncJob,
+	type SyncJobRelease
+} from '$lib/server/repositories/syncJobsRepository';
 
 export const GARMIN_SYNC_SOURCE = 'garmin-sync';
 
@@ -52,22 +58,17 @@ export type SyncResult = {
 export type SyncOptions = {
 	/** Injectable for tests. Defaults to the real garmin-connect session. */
 	openSession?: OpenGarminSession;
+	/** Manual "Sync now": bypass the throttle window (still honors the lock). */
+	ignoreThrottle?: boolean;
 };
 
-// In-memory guard: one concurrent sync per user per process. The auto-sync
-// trigger and a manual "Sync now" can race; this keeps them from overlapping.
-const inFlight = new Set<string>();
-
-// Auto-sync throttle. NOTE: this is intentionally separate from the stored
-// `lastSyncAt`, which is the import *cursor* (the newest imported activity's
-// start time) — that can be days old, so it can't double as "when did we last
-// try to sync". An in-memory map is fine for a personal app: after a restart
-// the first page load triggers one sync, which is harmless.
-const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
-const lastAutoAttempt = new Map<string, number>();
-
+// The throttle + concurrency lock now live in the `sync_jobs` table
+// (syncJobsRepository), so they survive restarts and coordinate across tabs and
+// processes — unlike the old in-memory Set/Map. `lastSyncAt` on the credential
+// is still the import *cursor* (newest imported activity), kept separate from
+// the sync_jobs throttle timestamp.
 export function isUserSyncing(userId: string): boolean {
-	return inFlight.has(userId);
+	return isSyncJobRunning(userId);
 }
 
 /** Fire-and-forget auto-sync, throttled to once per AUTO_SYNC_INTERVAL_MS per
@@ -76,17 +77,16 @@ export function isUserSyncing(userId: string): boolean {
 export async function maybeTriggerAutoSync(userId: string, opts: SyncOptions = {}): Promise<void> {
 	try {
 		if (isShuttingDown()) return; // don't start new work while draining for shutdown
-		if (inFlight.has(userId)) return;
-		const last = lastAutoAttempt.get(userId) ?? 0;
-		if (Date.now() - last < AUTO_SYNC_INTERVAL_MS) return; // cheap throttle before any DB hit
 
+		// Cheap eligibility gate before touching the lock: skip users with no
+		// credential or sync disabled, and don't hammer Garmin after an auth
+		// failure (that needs a manual reconnect to clear). The durable throttle
+		// + lock then lives in sync_jobs, claimed inside syncForUser.
 		const cred = await getGarminCredentialForUser(userId);
 		if (!cred || !cred.syncEnabled) return;
-		// Don't hammer Garmin on every page load after an auth failure — that
-		// needs a manual reconnect to clear.
 		if (cred.lastSyncStatus === 'auth_failed') return;
 
-		lastAutoAttempt.set(userId, Date.now());
+		// Fire-and-forget; do NOT await (keep the page load non-blocking).
 		void syncForUser(userId, opts).catch(() => {});
 	} catch {
 		// Auto-sync is best-effort; never let it disrupt a page load.
@@ -122,15 +122,21 @@ function sha256Hex(bytes: Uint8Array): string {
 export async function syncForUser(userId: string, opts: SyncOptions = {}): Promise<SyncResult> {
 	const empty = { imported: 0, duplicate: 0, unsupported: 0, failed: 0 } as const;
 
-	if (inFlight.has(userId)) return { outcome: 'skipped', ...empty };
 	if (isShuttingDown()) return { outcome: 'skipped', ...empty };
 
 	const cred = await getGarminCredentialForUser(userId);
 	if (!cred) return { outcome: 'no_credential', ...empty };
 	if (!cred.syncEnabled) return { outcome: 'disabled', ...empty };
 
-	inFlight.add(userId);
+	// Durable, atomic throttle + lock (survives restarts; safe across tabs and
+	// processes). Auto-sync honors the 15-min throttle; manual "Sync now" passes
+	// ignoreThrottle but still can't collide with an in-flight sync.
+	if (!tryAcquireSyncJob(userId, { ignoreThrottle: opts.ignoreThrottle })) {
+		return { outcome: 'skipped', ...empty };
+	}
+
 	beginCriticalWork(); // graceful shutdown drains this before checkpoint + close
+	let release: SyncJobRelease = { ok: false, status: 'error', error: null };
 	const openSession = opts.openSession ?? openGarminSession;
 
 	const batchId = crypto.randomUUID();
@@ -355,15 +361,17 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 		const advancedAt = cursorMs > (sinceMs ?? 0) ? new Date(cursorMs) : undefined;
 		await updateGarminSyncStatus({ userId, lastSyncAt: advancedAt, lastSyncStatus: 'ok', lastSyncError: null });
 
+		release = { ok: true, status: 'ok' };
 		return { outcome: 'ok', imported, duplicate, unsupported, failed, batchId };
 	} catch (err) {
 		const message = redactGarminError(err);
 		const outcome: SyncOutcome = isAuthError(message) ? 'auth_failed' : 'error';
 		await updateGarminSyncStatus({ userId, lastSyncStatus: outcome, lastSyncError: message });
 		await updateImportBatchProgress({ id: batchId, userId, status: 'failed', completedAt: new Date() }).catch(() => {});
+		release = { ok: false, status: outcome, error: message };
 		return { outcome, imported, duplicate, unsupported, failed, batchId, error: message };
 	} finally {
-		inFlight.delete(userId);
+		releaseSyncJob(userId, release);
 		endCriticalWork();
 	}
 }
