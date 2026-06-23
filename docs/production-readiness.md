@@ -8,15 +8,15 @@ Priority key: 🔴 critical (data loss / security / correctness) · 🟠 high (r
 
 ## 1. Data safety (SQLite + backups)
 
-- [ ] 🔴 Enable **WAL mode** (`PRAGMA journal_mode = WAL`) on every connection / at startup.
-- [ ] 🔴 Enable **`PRAGMA foreign_keys = ON`** — OFF by default in SQLite, per-connection. Without it, FK constraints are silently ignored.
-- [ ] 🔴 Set **`PRAGMA busy_timeout = 5000`** so concurrent writes wait instead of throwing `SQLITE_BUSY` (your auto-sync-on-page-load makes contention real).
-- [ ] 🔴 Set **`PRAGMA synchronous = NORMAL`** (correct durability/speed balance under WAL).
+- [x] 🔴 Enable **WAL mode** (`PRAGMA journal_mode = WAL`) on every connection / at startup.
+- [x] 🔴 Enable **`PRAGMA foreign_keys = ON`** — OFF by default in SQLite, per-connection. Without it, FK constraints are silently ignored.
+- [x] 🔴 Set **`PRAGMA busy_timeout = 5000`** so concurrent writes wait instead of throwing `SQLITE_BUSY` (your auto-sync-on-page-load makes contention real).
+- [x] 🔴 Set **`PRAGMA synchronous = NORMAL`** (correct durability/speed balance under WAL).
 - [ ] 🔴 **Litestream** continuous backup to S3-compatible storage, and **test a restore** end-to-end (an untested backup is not a backup).
 - [ ] 🔴 **Versioned migrations only** — Drizzle migration files applied transactionally on boot; forbid `drizzle-kit push` in prod.
 - [ ] 🟠 Wrap the **FIT import pipeline in a transaction** (activity row + streams + dedup atomic; crash mid-import leaves nothing half-written).
 - [ ] 🟠 Wrap **wellness upserts** the same way.
-- [ ] 🔴 **Graceful shutdown** on SIGTERM: stop new sync work, finish in-flight writes, checkpoint WAL, `db.close()`. (Docker sends SIGTERM on every deploy/restart.)
+- [x] 🔴 **Graceful shutdown** on SIGTERM: stop new sync work, finish in-flight writes, checkpoint WAL, `db.close()`. (Docker sends SIGTERM on every deploy/restart.)
 - [ ] 🟡 Periodic `PRAGMA wal_checkpoint(TRUNCATE)` (or rely on Litestream's checkpointing) so the WAL file doesn't grow unbounded.
 - [ ] 🟡 Periodic `PRAGMA optimize` / occasional `ANALYZE` for query planner health.
 
@@ -31,7 +31,7 @@ Priority key: 🔴 critical (data loss / security / correctness) · 🟠 high (r
 
 ## 3. Garmin sync reliability (your #1 fragility)
 
-- [ ] 🔴 **DB-backed sync job + lock** replacing the in-memory throttle/in-flight map (survives restarts, safe across processes/tabs). *(spec'd below)*
+- [x] 🔴 **DB-backed sync job + lock** replacing the in-memory throttle/in-flight map (survives restarts, safe across processes/tabs). *(spec'd below)*
 - [ ] 🟠 **Circuit breaker + exponential backoff** on Garmin failures/429s (failure mode can be an account ban — never retry tightly).
 - [ ] 🟠 **Graceful degradation**: dashboard / calendar / activities render fully when sync is down or has never run.
 - [ ] 🟠 **Honest sync status in UI**: last-synced time, "syncing", "failing", "reconnect needed".
