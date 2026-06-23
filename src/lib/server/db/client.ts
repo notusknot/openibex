@@ -31,8 +31,17 @@ export function getDb() {
 	fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
 
 	sqlite = new Database(sqlitePath);
-	sqlite.pragma('journal_mode = WAL');
-	sqlite.pragma('foreign_keys = ON');
+	// Pragmas are per-connection and must be set before first use. better-sqlite3
+	// is a single long-lived connection, so setting them once here covers the
+	// whole process. SQLite's defaults are tuned for embedded/CLI use, not a
+	// server with a write-on-page-load sync — these correct durability,
+	// integrity, and concurrency. See docs/stability-hardening-spec.md §1.
+	sqlite.pragma('journal_mode = WAL'); // concurrent readers + crash resilience
+	sqlite.pragma('synchronous = NORMAL'); // correct durability/speed balance under WAL
+	sqlite.pragma('foreign_keys = ON'); // OFF by default in SQLite — enforce integrity
+	sqlite.pragma('busy_timeout = 5000'); // wait up to 5s for a writer instead of SQLITE_BUSY
+	sqlite.pragma('cache_size = -16000'); // ~16MB page cache (negative value = KiB)
+	sqlite.pragma('temp_store = MEMORY'); // keep temp b-trees off disk
 	db = drizzle(sqlite, { schema });
 	ensureMigrations(db);
 	return db;
