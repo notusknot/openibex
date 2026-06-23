@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { activities, type Sport } from '$lib/server/db/schema';
 
@@ -166,6 +166,40 @@ export async function listActivitiesForUserInTimeRange(input: {
 		)
 		.orderBy(desc(activities.startTime))
 		.all();
+}
+
+export async function countActivitiesForUser(userId: string): Promise<number> {
+	const db = getDb();
+	const row = db
+		.select({ c: sql<number>`count(*)` })
+		.from(activities)
+		.where(eq(activities.userId, userId))
+		.get();
+	return row?.c ?? 0;
+}
+
+export async function sumActivitiesForUserInTimeRange(input: {
+	userId: string;
+	from: Date;
+	to: Date;
+}): Promise<{ loadSum: number; durationSecSum: number; distanceMSum: number }> {
+	const db = getDb();
+	const row = db
+		.select({
+			loadSum: sql<number>`coalesce(sum(${activities.loadScore}), 0)`,
+			durationSecSum: sql<number>`coalesce(sum(${activities.durationSec}), 0)`,
+			distanceMSum: sql<number>`coalesce(sum(${activities.distanceM}), 0)`
+		})
+		.from(activities)
+		.where(
+			and(
+				eq(activities.userId, input.userId),
+				gte(activities.startTime, input.from),
+				lte(activities.startTime, input.to)
+			)
+		)
+		.get();
+	return row ?? { loadSum: 0, durationSecSum: 0, distanceMSum: 0 };
 }
 
 export async function listActivitiesForUserOnDateAndSport(input: {
