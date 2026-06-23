@@ -19,6 +19,10 @@ services:
       - OPEN_REGISTRATION=${OPEN_REGISTRATION:-false}
       - SESSION_SECRET=${SESSION_SECRET}
       - SESSION_TTL_DAYS=${SESSION_TTL_DAYS:-30}
+      # SvelteKit adapter-node needs ORIGIN set in production so form actions
+      # pass the built-in CSRF check (compares request Origin header to this).
+      # Override to https://your.domain when running behind a reverse proxy.
+      - ORIGIN=${ORIGIN:-http://localhost:3000}
     volumes:
       - ./data:/data
     restart: unless-stopped
