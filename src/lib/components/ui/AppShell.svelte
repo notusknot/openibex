@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { theme } from '$lib/stores/theme';
 
@@ -8,15 +9,36 @@
 		season: { tss: number; hours: number; km: number };
 	} | null = null;
 
+	type TabIcon = 'dashboard' | 'calendar' | 'activities' | 'settings';
+
 	// Analytics + Imports are intentionally hidden from the nav for now —
 	// the routes are still reachable by direct URL but the user hasn't
 	// committed to surfacing them yet. Re-add when ready.
-	const navItems: { href: string; label: string; showCount?: boolean }[] = [
-		{ href: '/dashboard', label: 'Dashboard' },
-		{ href: '/calendar', label: 'Calendar' },
-		{ href: '/activities', label: 'Activities', showCount: true },
-		{ href: '/settings', label: 'Settings' }
+	const navItems: { href: string; label: string; showCount?: boolean; icon: TabIcon }[] = [
+		{ href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+		{ href: '/calendar', label: 'Calendar', icon: 'calendar' },
+		{ href: '/activities', label: 'Activities', showCount: true, icon: 'activities' },
+		{ href: '/settings', label: 'Settings', icon: 'settings' }
 	];
+
+	// Keep iOS Safari's URL bar / PWA chrome color in sync with the in-app
+	// theme store. The static <meta theme-color> tags in app.html cover
+	// prefers-color-scheme; this one (no `media`) wins when present.
+	let themeMeta: HTMLMetaElement | null = null;
+	onMount(() => {
+		let existing = document.querySelector<HTMLMetaElement>(
+			'meta[name="theme-color"]:not([media])'
+		);
+		if (!existing) {
+			existing = document.createElement('meta');
+			existing.name = 'theme-color';
+			document.head.appendChild(existing);
+		}
+		themeMeta = existing;
+	});
+	$: if (themeMeta) {
+		themeMeta.content = $theme === 'dark' ? '#0d1a15' : '#f4f2ec';
+	}
 
 	$: pathname = $page.url.pathname;
 	$: displayName = user.displayName ?? user.email;
@@ -100,7 +122,30 @@
 		{#each navItems as item}
 			{@const active = isActive(pathname, item.href)}
 			<a class="tab" class:active href={item.href} aria-current={active ? 'page' : undefined}>
-				<span class="tab-dot" class:active aria-hidden="true"></span>
+				{#if item.icon === 'dashboard'}
+					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+						<rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+						<rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+						<rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+					</svg>
+				{:else if item.icon === 'calendar'}
+					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="3" y="5" width="18" height="16" rx="2" />
+						<line x1="3" y1="10" x2="21" y2="10" />
+						<line x1="8" y1="3" x2="8" y2="7" />
+						<line x1="16" y1="3" x2="16" y2="7" />
+					</svg>
+				{:else if item.icon === 'activities'}
+					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+					</svg>
+				{:else if item.icon === 'settings'}
+					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="3" />
+						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.27 16.96l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+					</svg>
+				{/if}
 				<span class="tab-label">{item.label}</span>
 			</a>
 		{/each}
@@ -390,41 +435,110 @@
 			left: 0;
 			right: 0;
 			bottom: 0;
-			height: 64px;
+			/* tab area + iPhone safe-area + a bit of breathing room. */
+			height: calc(60px + env(safe-area-inset-bottom, 0px));
 			background: var(--card);
 			border-top: 1px solid var(--line);
 			justify-content: space-around;
 			align-items: stretch;
-			padding: 8px 0 max(8px, env(safe-area-inset-bottom, 0px));
+			padding: 6px 0 env(safe-area-inset-bottom, 0px);
 			z-index: 10;
+			/* iOS-blur for a more native feel; falls back to solid card bg. */
+			backdrop-filter: saturate(160%) blur(14px);
+			-webkit-backdrop-filter: saturate(160%) blur(14px);
 		}
 		.tab {
 			display: flex;
 			flex-direction: column;
 			align-items: center;
 			justify-content: center;
-			gap: 4px;
+			gap: 3px;
 			flex: 1;
 			text-decoration: none;
-			color: var(--muted);
-			font-size: 11px;
+			color: var(--faint);
+			font-size: 10.5px;
 			font-weight: 600;
-			padding: 4px 6px;
+			padding: 6px 6px;
+			min-height: 44px;
+			-webkit-tap-highlight-color: transparent;
+			touch-action: manipulation;
+			user-select: none;
+			transition: color 100ms ease, transform 100ms ease;
+		}
+		.tab:active {
+			transform: scale(0.94);
 		}
 		.tab.active {
 			color: var(--green);
 		}
-		.tab-dot {
-			width: 6px;
-			height: 6px;
-			border-radius: 50%;
-			background: transparent;
+		.tab-icon {
+			width: 24px;
+			height: 24px;
+			flex: none;
 		}
-		.tab-dot.active {
-			background: var(--green);
+		.tab-label {
+			line-height: 1;
 		}
 		.oi-main {
-			padding: 16px 16px 88px;
+			padding: 16px 16px calc(82px + env(safe-area-inset-bottom, 0px));
+			/* Allow momentum scroll on iOS. */
+			-webkit-overflow-scrolling: touch;
+		}
+	}
+
+	/* ── Global mobile typography bump ─────────────────────────────────────
+	   Most page chrome was sized for desktop and felt small on a phone.
+	   Tag-with-:global() so these override per-page scoped styles. */
+	@media (max-width: 767px) {
+		:global(.title) {
+			font-size: 26px !important;
+		}
+		:global(.subtitle) {
+			font-size: 12.5px !important;
+		}
+		:global(.card-title) {
+			font-size: 15px !important;
+		}
+		:global(.card-title-sm) {
+			font-size: 14px !important;
+		}
+		:global(.card-eyebrow) {
+			font-size: 11px !important;
+		}
+		:global(.sum-label),
+		:global(.kpi-label),
+		:global(.stat-label) {
+			font-size: 9.5px !important;
+		}
+		:global(.sum-val),
+		:global(.kpi-val) {
+			font-size: 26px !important;
+		}
+		:global(.sum-sub),
+		:global(.kpi-sub) {
+			font-size: 10.5px !important;
+		}
+		:global(.btn),
+		:global(.btn-primary) {
+			padding: 10px 16px !important;
+			font-size: 13px !important;
+		}
+		:global(.filter-chip) {
+			font-size: 12px !important;
+			padding: 7px 14px !important;
+		}
+		:global(.cell-title),
+		:global(.recent-title) {
+			font-size: 13.5px !important;
+		}
+		:global(.cell-num),
+		:global(.cell-tss),
+		:global(.cell-date),
+		:global(.recent-cell) {
+			font-size: 12px !important;
+		}
+		:global(.cell-hr) {
+			font-size: 11.5px !important;
 		}
 	}
 	:global(.oi-main::-webkit-scrollbar) {

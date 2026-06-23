@@ -1,69 +1,40 @@
 <script lang="ts">
 	export let data: { user: { email: string; displayName: string | null } | null };
-
-	const title = 'OpenIbex';
-	const tagline = 'A self-hosted training platform for endurance athletes.';
 </script>
 
-<div class="app">
-	<header class="header">
-		<div class="brand">
-			<div class="title">{title}</div>
-			<div class="tagline">{tagline}</div>
-		</div>
-		<nav class="nav">
-			<a href="/">Home</a>
-			<a href="/api/health">Health</a>
-			{#if data.user}
-				<a href="/dashboard">Dashboard</a>
-			{:else}
-				<a href="/login">Login</a>
-				<a href="/register">Register</a>
-			{/if}
-		</nav>
-	</header>
+<div class="oi public-root">
+	<slot />
 
-	<main class="main">
-		<slot />
-	</main>
+	{#if data.user}
+		<a class="signed-in-pill oi-mono" href="/dashboard">Signed in · {data.user.email}</a>
+	{/if}
 </div>
 
 <style>
-	.app {
+	.public-root {
 		min-height: 100vh;
-		display: grid;
-		grid-template-rows: auto 1fr;
-	}
-
-	.header {
+		min-height: 100svh;
+		background: var(--bg);
+		color: var(--ink);
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
-		padding: 16px 20px;
-		border-bottom: 1px solid #e2e8f0;
-		background: white;
+		justify-content: center;
+		padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+		font-family: 'Archivo', system-ui, sans-serif;
 	}
-
-	.brand .title {
-		font-weight: 700;
+	.signed-in-pill {
+		position: fixed;
+		top: 16px;
+		right: 16px;
+		font-size: 11px;
+		color: var(--muted);
+		text-decoration: none;
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		padding: 6px 12px;
 	}
-
-	.brand .tagline {
-		font-size: 0.9rem;
-		color: #475569;
-	}
-
-	.nav {
-		display: flex;
-		gap: 12px;
-		font-size: 0.95rem;
-	}
-
-	.main {
-		padding: 24px 20px;
-		max-width: 960px;
-		width: 100%;
-		margin: 0 auto;
+	.signed-in-pill:hover {
+		color: var(--ink);
 	}
 </style>
-

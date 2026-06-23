@@ -1,0 +1,19 @@
+{
+  "name": "OpenIbex",
+  "short_name": "OpenIbex",
+  "description": "Self-hosted training platform for endurance athletes",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f2ec",
+  "theme_color": "#13332a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
