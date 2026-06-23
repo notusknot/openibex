@@ -6,6 +6,13 @@
 	$: activity = detail.activity;
 	$: chart = detail.chart;
 
+	// Native-tooltip explanations for the calculated summary stats (the rest —
+	// duration, distance, HR, etc. — are raw measurements that need none).
+	const STAT_TIPS: Record<string, string> = {
+		TSS: "TSS (Training Stress Score): this session's training load — roughly hours × intensity² × 100, or a sport-based estimate when power/HR is missing. Higher means more demanding; it's what feeds your Fitness and Fatigue.",
+		IF: 'IF (Intensity Factor): how hard this session was relative to your threshold (1.0 = right at threshold). Use it to tell an easy session from tempo from a threshold-plus effort.'
+	};
+
 	// Chart sizing
 	const CHART_W = 640;
 	const CHART_VIEW_H = 208;
@@ -138,7 +145,7 @@
 	<div class="stats-strip">
 		{#each detail.summaryStats as s}
 			<div class="stat-card">
-				<div class="stat-label oi-mono">{s.label}</div>
+				<div class="stat-label oi-mono" class:has-tip={!!STAT_TIPS[s.label]} title={STAT_TIPS[s.label] ?? null}>{s.label}</div>
 				<div class="stat-val oi-mono">
 					{s.val}{#if s.unit}<span class="stat-unit"> {s.unit}</span>{/if}
 				</div>
@@ -422,6 +429,10 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	/* Calculated stats (TSS, IF) carry an explanatory native tooltip. */
+	.stat-label.has-tip {
+		cursor: help;
 	}
 	.stat-val {
 		font-size: 19px;

@@ -101,13 +101,34 @@
 
 	$: readinessDash = `${((READ_C * dashboard.kpis.readinessVal) / 100).toFixed(1)} ${READ_C.toFixed(1)}`;
 
+	// Plain-language explanations for the calculated training-load metrics,
+	// surfaced as native browser tooltips (title attributes): what the number is
+	// and how it should steer planning. Shared because Readiness and Monotony
+	// each appear in two places on this page.
+	const STAT_TIPS = {
+		fitness:
+			'Fitness (CTL): your 42-day exponentially-weighted average daily training load. Represents accumulated fitness — it climbs slowly with consistent training. Build it gradually; sharp jumps raise injury and overtraining risk.',
+		fatigue:
+			'Fatigue (ATL): your 7-day exponentially-weighted average daily load — short-term tiredness. When it stays high, schedule recovery before piling on more hard work.',
+		form:
+			'Form (TSB) = Fitness − Fatigue. Positive means fresh and rested; negative means you are carrying fatigue (normal during a build block). Aim for positive (roughly +5 to +20) going into key races.',
+		weekTss:
+			'Week TSS: total Training Stress Score over the last 7 days — your weekly training load. Keep week-to-week changes gradual rather than spiking it.',
+		readiness:
+			'Readiness: a 0–100 score derived from your Form/TSB (higher = fresher). Low → favour recovery or easy sessions; high → you can absorb intensity or race.',
+		monotony:
+			'Monotony: average daily load ÷ its 7-day standard deviation. High values (above ~2) mean every day looks the same — vary hard and easy days to bring it down.',
+		strain:
+			'Strain: weekly load × monotony. High strain is associated with illness, injury, and overtraining. Watch for sharp spikes.'
+	};
+
 	$: kpiCards = [
-		{ label: 'Fitness', val: String(dashboard.kpis.fitness), sub: `CTL · ramp ${dashboard.kpis.ramp}`, accent: 'var(--c-fit)' },
-		{ label: 'Fatigue', val: String(dashboard.kpis.fatigue), sub: 'ATL · 7-day', accent: 'var(--c-fat)' },
-		{ label: 'Form', val: dashboard.kpis.form, sub: `TSB · ${dashboard.kpis.readinessLabel}`, accent: 'var(--c-form)' },
-		{ label: 'Week TSS', val: String(dashboard.kpis.weekTss), sub: 'swim/bike/run', accent: 'var(--swim)' },
-		{ label: 'Readiness', val: String(dashboard.kpis.readinessVal), sub: dashboard.kpis.readinessLabel, accent: 'var(--green)' },
-		{ label: 'Monotony', val: dashboard.kpis.monotony, sub: `strain ${dashboard.kpis.strain}`, accent: 'var(--bike)' }
+		{ label: 'Fitness', val: String(dashboard.kpis.fitness), sub: `CTL · ramp ${dashboard.kpis.ramp}`, accent: 'var(--c-fit)', tip: STAT_TIPS.fitness },
+		{ label: 'Fatigue', val: String(dashboard.kpis.fatigue), sub: 'ATL · 7-day', accent: 'var(--c-fat)', tip: STAT_TIPS.fatigue },
+		{ label: 'Form', val: dashboard.kpis.form, sub: `TSB · ${dashboard.kpis.readinessLabel}`, accent: 'var(--c-form)', tip: STAT_TIPS.form },
+		{ label: 'Week TSS', val: String(dashboard.kpis.weekTss), sub: 'swim/bike/run', accent: 'var(--swim)', tip: STAT_TIPS.weekTss },
+		{ label: 'Readiness', val: String(dashboard.kpis.readinessVal), sub: dashboard.kpis.readinessLabel, accent: 'var(--green)', tip: STAT_TIPS.readiness },
+		{ label: 'Monotony', val: dashboard.kpis.monotony, sub: `strain ${dashboard.kpis.strain}`, accent: 'var(--bike)', tip: STAT_TIPS.monotony }
 	];
 
 	function computePmcGeo(vals: PageData['dashboard']['series']) {
@@ -245,8 +266,8 @@
 					Dark
 				</button>
 			</div>
-			<span class="pill oi-mono" aria-hidden="true">All sports ▾</span>
-			<a class="btn" href="/settings/export">Export</a>
+			<!--span class="pill oi-mono" aria-hidden="true">All sports ▾</span>
+			<a class="btn" href="/settings/export">Export</a-->
 			<a class="btn btn-primary" href="/activities/upload">Upload .fit</a>
 		</div>
 	</header>
@@ -254,7 +275,7 @@
 	<div class="kpi-strip">
 		{#each kpiCards as k}
 			<div class="kpi" style="border-top-color: {k.accent}">
-				<div class="kpi-label oi-mono">{k.label}</div>
+				<div class="kpi-label oi-mono" title={k.tip}>{k.label}</div>
 				<div class="kpi-val oi-mono">{k.val}</div>
 				<div class="kpi-sub oi-mono">{k.sub}</div>
 			</div>
@@ -369,7 +390,7 @@
 					<text x="65" y="83" text-anchor="middle" class="oi-mono ring-sub">/100</text>
 				</svg>
 				<div>
-					<div class="readiness-label oi-mono">Readiness</div>
+					<div class="readiness-label oi-mono" title={STAT_TIPS.readiness}>Readiness</div>
 					<div class="readiness-state">{dashboard.kpis.readinessLabel}</div>
 					<div class="readiness-hint">Based on TSB. Updated today.</div>
 				</div>
@@ -377,12 +398,12 @@
 
 			<div class="card split-card">
 				<div class="split-cell">
-					<div class="split-label oi-mono">Monotony</div>
+					<div class="split-label oi-mono" title={STAT_TIPS.monotony}>Monotony</div>
 					<div class="split-val oi-mono">{dashboard.kpis.monotony}</div>
 				</div>
 				<div class="split-divider"></div>
 				<div class="split-cell">
-					<div class="split-label oi-mono">Strain</div>
+					<div class="split-label oi-mono" title={STAT_TIPS.strain}>Strain</div>
 					<div class="split-val oi-mono">{dashboard.kpis.strain}</div>
 				</div>
 			</div>
@@ -617,14 +638,6 @@
 	.theme-btn.active {
 		background: var(--green);
 		color: #fff;
-	}
-	.pill {
-		font-size: 11px;
-		color: var(--btn-ink);
-		background: var(--btn);
-		border: 1px solid var(--line);
-		border-radius: 7px;
-		padding: 8px 12px;
 	}
 	.btn {
 		font: 600 12px 'Archivo', system-ui, sans-serif;
@@ -1194,9 +1207,6 @@
 		.head-actions {
 			flex-wrap: wrap;
 		}
-		.pill {
-			display: none; /* sport filter pill — non-essential on phone */
-		}
 		.card-head {
 			flex-wrap: wrap;
 			gap: 8px;
@@ -1217,5 +1227,12 @@
 		.recent-card {
 			padding: 12px 12px 4px;
 		}
+	}
+
+	/* Stat labels carry an explanatory native tooltip — hint it with the cursor. */
+	.kpi-label,
+	.readiness-label,
+	.split-label {
+		cursor: help;
 	}
 </style>
