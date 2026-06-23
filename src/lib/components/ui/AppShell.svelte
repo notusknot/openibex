@@ -8,12 +8,13 @@
 		season: { tss: number; hours: number; km: number };
 	} | null = null;
 
+	// Analytics + Imports are intentionally hidden from the nav for now —
+	// the routes are still reachable by direct URL but the user hasn't
+	// committed to surfacing them yet. Re-add when ready.
 	const navItems: { href: string; label: string; showCount?: boolean }[] = [
 		{ href: '/dashboard', label: 'Dashboard' },
 		{ href: '/calendar', label: 'Calendar' },
 		{ href: '/activities', label: 'Activities', showCount: true },
-		{ href: '/analytics', label: 'Analytics' },
-		{ href: '/imports', label: 'Imports' },
 		{ href: '/settings', label: 'Settings' }
 	];
 
@@ -31,9 +32,13 @@
 		return base.slice(0, 2).toUpperCase();
 	}
 
-	function isActive(href: string): boolean {
-		if (href === '/dashboard') return pathname === '/dashboard';
-		return pathname === href || pathname.startsWith(href + '/');
+	// `current` must be passed explicitly so the {@const} in the each block
+	// has pathname as a tracked dependency — Svelte's compiler doesn't trace
+	// into function bodies, so reading $page from inside this function would
+	// not trigger re-renders on navigation.
+	function isActive(current: string, href: string): boolean {
+		if (href === '/dashboard') return current === '/dashboard';
+		return current === href || current.startsWith(href + '/');
 	}
 </script>
 
@@ -49,7 +54,7 @@
 
 		<nav class="nav" aria-label="Primary">
 			{#each navItems as item}
-				{@const active = isActive(item.href)}
+				{@const active = isActive(pathname, item.href)}
 				<a class="nav-item" class:active href={item.href} aria-current={active ? 'page' : undefined}>
 					<span class="nav-label">{item.label}</span>
 					{#if active}
