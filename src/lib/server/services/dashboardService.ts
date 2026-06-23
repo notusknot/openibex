@@ -6,8 +6,9 @@ import {
 	getActivitiesList,
 	type ActivityListRow
 } from '$lib/server/services/activitiesListService';
-import { fallbackLoadScore } from '$lib/server/services/analytics/load';
+import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
+import type { UserPreferences } from '$lib/validation/userPreferences';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TC = 42;
@@ -70,9 +71,8 @@ function localDayIndex(activityDate: Date, windowStart: Date): number {
 	return Math.round((day - start) / DAY_MS);
 }
 
-function loadFor(a: DbActivity): number {
-	const score = a.loadScore ?? fallbackLoadScore({ sport: a.sport as Sport, durationSec: a.durationSec ?? null });
-	return score ?? 0;
+function loadFor(a: DbActivity, prefs: ThresholdPrefs | null): number {
+	return sharedLoadFor(a, prefs);
 }
 
 function readinessLabel(v: number): string {
@@ -85,13 +85,14 @@ function readinessLabel(v: number): string {
 
 export async function getDashboardData(
 	userId: string,
-	opts: { now?: Date; days?: number } = {}
+	opts: { now?: Date; days?: number; prefs?: UserPreferences | null } = {}
 ): Promise<DashboardData> {
 	const days = opts.days ?? 84;
 	const nowRaw = opts.now ?? new Date();
 	const todayStart = startOfLocalDay(nowRaw);
 	const todayEnd = new Date(todayStart.getTime() + DAY_MS - 1);
 	const windowStart = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+	const prefs = opts.prefs ?? null;
 
 	const [windowActivities, recentList] = await Promise.all([
 		listActivitiesForUserInTimeRange({
@@ -99,7 +100,7 @@ export async function getDashboardData(
 			from: windowStart,
 			to: todayEnd
 		}),
-		getActivitiesList({ userId, limit: 10 })
+		getActivitiesList({ userId, limit: 10, prefs })
 	]);
 
 	const dailyTss = new Array<number>(days).fill(0);
@@ -113,7 +114,7 @@ export async function getDashboardData(
 	for (const a of windowActivities) {
 		const idx = localDayIndex(new Date(a.startTime), windowStart);
 		if (idx < 0 || idx >= days) continue;
-		const load = loadFor(a);
+		const load = loadFor(a, prefs);
 		dailyTss[idx]! += load;
 		const disp = SPORT_DISPLAY[a.sport as Sport];
 		dailyBySport[disp]![idx]! += load;
@@ -190,7 +191,7 @@ export async function getDashboardData(
 	const sportTotals = { swim: 0, bike: 0, run: 0 };
 	for (const a of windowActivities) {
 		const disp = SPORT_DISPLAY[a.sport as Sport];
-		if (disp === 'swim' || disp === 'bike' || disp === 'run') sportTotals[disp] += loadFor(a);
+		if (disp === 'swim' || disp === 'bike' || disp === 'run') sportTotals[disp] += loadFor(a, prefs);
 	}
 	const sportSum = sportTotals.swim + sportTotals.bike + sportTotals.run;
 	const sport =

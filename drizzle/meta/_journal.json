@@ -57,6 +57,13 @@
       "when": 1779431509609,
       "tag": "0007_breezy_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1782199622435,
+      "tag": "0008_tranquil_scalphunter",
+      "breakpoints": true
     }
   ]
 }

@@ -557,7 +557,7 @@
 							<span class="recent-tag oi-mono" style="background: {r.color}">{r.tag}</span>
 						</span>
 						<span class="recent-cell recent-title">{r.title}</span>
-						<span class="recent-cell oi-mono right">{r.distanceLabel} km</span>
+						<span class="recent-cell oi-mono right">{r.distanceLabel} {r.distanceUnitLabel}</span>
 						<span class="recent-cell oi-mono right">{r.durationLabel}</span>
 						<span class="recent-cell oi-mono right recent-tss">{r.tss}</span>
 					</a>

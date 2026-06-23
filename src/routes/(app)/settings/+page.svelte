@@ -1,21 +1,35 @@
 <script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
+	import { paceFromSecPerKm, paceUnit, type Units } from '$lib/units';
 
 	export let data: PageData;
 	export let form: ActionData;
 
 	$: user = data.user;
+	$: prefs = data.userPrefs;
 	$: displayName = user.displayName ?? '';
 	$: initials = computeInitials(user.displayName ?? user.email);
 
 	let saving = false;
 	let saved = false;
 
-	type Units = 'metric' | 'imperial';
-	type WeekStart = 'mon' | 'sun';
-	let units: Units = 'metric';
-	let weekStart: WeekStart = 'mon';
+	// Form-local state, hydrated from server-loaded prefs. Numbers display as
+	// empty strings when null so the input shows the placeholder rather than "0".
+	$: units = (prefs?.units ?? 'imperial') as Units;
+	$: weekStart = (prefs?.weekStart ?? 'mon') as 'mon' | 'sun';
+	$: ftpInput = prefs?.ftpWatts != null ? String(prefs.ftpWatts) : '';
+	$: thrHrInput = prefs?.thresholdHrBpm != null ? String(prefs.thresholdHrBpm) : '';
+	$: maxHrInput = prefs?.maxHrBpm != null ? String(prefs.maxHrBpm) : '';
+	$: thrPaceInput = paceInputFromPrefs(prefs?.thresholdPaceSecPerKm ?? null, units);
+
+	function paceInputFromPrefs(secPerKm: number | null, u: Units): string {
+		if (secPerKm === null) return '';
+		const sec = paceFromSecPerKm(secPerKm, u);
+		const m = Math.floor(sec / 60);
+		const s = Math.round(sec % 60);
+		return `${m}:${s.toString().padStart(2, '0')}`;
+	}
 
 	const SUB_NAV = [
 		{ href: '#profile', label: 'Profile' },
@@ -104,39 +118,64 @@
 			</section>
 
 			<section id="thresholds" class="card">
-				<div class="card-title">
-					Training thresholds <span class="soon-pill">Coming soon</span>
-				</div>
+				<div class="card-title">Training thresholds</div>
 				<div class="card-eyebrow oi-mono">
-					Will compute TSS and IF from these per-user. Currently OpenIbex uses defaults (FTP 240 W, threshold HR 160 bpm).
+					Used to compute TSS and IF. Bike TSS uses normalized power vs FTP;
+					run TSS uses average HR vs threshold HR. Leave blank to fall back to
+					app defaults (FTP 240 W, threshold HR 160 bpm).
 				</div>
 
 				<div class="field-grid four-col">
 					<label class="field">
 						<span class="field-label oi-mono">FTP (W)</span>
-						<input class="oi-input oi-mono" type="text" inputmode="numeric" placeholder="240" disabled />
+						<input
+							class="oi-input oi-mono"
+							type="text"
+							inputmode="numeric"
+							name="ftpWatts"
+							placeholder="240"
+							bind:value={ftpInput}
+						/>
 					</label>
 					<label class="field">
 						<span class="field-label oi-mono">Thr. HR (bpm)</span>
-						<input class="oi-input oi-mono" type="text" inputmode="numeric" placeholder="160" disabled />
+						<input
+							class="oi-input oi-mono"
+							type="text"
+							inputmode="numeric"
+							name="thresholdHrBpm"
+							placeholder="160"
+							bind:value={thrHrInput}
+						/>
 					</label>
 					<label class="field">
-						<span class="field-label oi-mono">Thr. pace /km</span>
-						<input class="oi-input oi-mono" type="text" placeholder="4:00" disabled />
+						<span class="field-label oi-mono">Thr. pace {paceUnit(units)}</span>
+						<input
+							class="oi-input oi-mono"
+							type="text"
+							name="thresholdPace"
+							placeholder={units === 'imperial' ? '6:30' : '4:00'}
+							bind:value={thrPaceInput}
+						/>
 					</label>
 					<label class="field">
 						<span class="field-label oi-mono">Max HR (bpm)</span>
-						<input class="oi-input oi-mono" type="text" inputmode="numeric" placeholder="190" disabled />
+						<input
+							class="oi-input oi-mono"
+							type="text"
+							inputmode="numeric"
+							name="maxHrBpm"
+							placeholder="190"
+							bind:value={maxHrInput}
+						/>
 					</label>
 				</div>
 			</section>
 
 			<section id="display" class="card">
-				<div class="card-title">
-					Units &amp; display <span class="soon-pill">Coming soon</span>
-				</div>
+				<div class="card-title">Units &amp; display</div>
 				<div class="card-eyebrow oi-mono">
-					Choice is captured for future formatting; the app currently renders distances in km and miles is not yet supported throughout.
+					Applied across distance, elevation, and pace displays throughout the app.
 				</div>
 
 				<div class="display-row">
@@ -194,6 +233,9 @@
 						</button>
 					</div>
 				</div>
+
+				<input type="hidden" name="units" value={units} />
+				<input type="hidden" name="weekStart" value={weekStart} />
 			</section>
 
 			<section id="integrations" class="card">
@@ -235,7 +277,6 @@
 						<div class="row-title">Signed in as</div>
 						<div class="row-help oi-mono">{user.email}</div>
 					</div>
-					<!-- Logout posts to /logout outside this form to avoid action conflicts. -->
 				</div>
 				<div class="account-row">
 					<div>
@@ -263,8 +304,6 @@
 	</div>
 </section>
 
-<!-- Logout sits outside the main settings form so submitting "Sign out"
-     doesn't get tangled up with the profile save action. -->
 <form id="logoutForm" method="POST" action="/logout" class="logout-form" aria-hidden="true"></form>
 
 <style>
@@ -585,8 +624,6 @@
 			gap: 0;
 		}
 		.subnav {
-			/* Sticky 170-px subnav is only useful on desktop — sections are
-			   anchor-linked but on mobile the user just scrolls. */
 			display: none;
 		}
 		.card {

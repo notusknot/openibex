@@ -9,8 +9,22 @@ import {
 import { getPlannedWorkoutByIdForUser } from '$lib/server/repositories/plannedWorkoutsRepository';
 import { getWorkoutLinkForActivity } from '$lib/server/repositories/workoutLinksRepository';
 import { readStreamBlob } from '$lib/server/services/fileStorageService';
-import { fallbackLoadScore } from '$lib/server/services/analytics/load';
+import {
+	intensityFactorFor,
+	loadFor as sharedLoadFor,
+	type ThresholdPrefs
+} from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
+import type { UserPreferences } from '$lib/validation/userPreferences';
+import {
+	distanceLabel,
+	distanceUnit,
+	elevationLabel,
+	elevationUnit,
+	paceLabel,
+	paceUnit,
+	type Units
+} from '$lib/units';
 
 const SPORT_COLOR_VAR: Record<Sport, string> = {
 	Bike: 'var(--bike)',
@@ -116,11 +130,10 @@ function fmtMs(durationSec: number | null): string {
 	return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-function fmtPace(secPerKm: number | null): string {
-	if (!secPerKm || !Number.isFinite(secPerKm) || secPerKm <= 0) return '—';
-	const m = Math.floor(secPerKm / 60);
-	const s = Math.round(secPerKm % 60);
-	return `${m}:${s.toString().padStart(2, '0')}/km`;
+function fmtPaceWithUnit(secPerKm: number | null, units: Units): string {
+	const label = paceLabel(secPerKm, units);
+	if (label === '—') return '—';
+	return `${label}${paceUnit(units)}`;
 }
 
 function fmtDateLong(d: Date): string {
@@ -134,10 +147,6 @@ function fmtDateLong(d: Date): string {
 	});
 }
 
-function loadFor(a: DbActivity): number {
-	const score = a.loadScore ?? fallbackLoadScore({ sport: a.sport, durationSec: a.durationSec });
-	return score ?? 0;
-}
 
 // Bucket-mean downsample to `target` points, preserving x-monotonic structure.
 function downsample(values: number[], target: number): number[] {
@@ -227,9 +236,12 @@ export function bestSegmentTime(
 export async function getActivityDetail(input: {
 	userId: string;
 	activityId: string;
+	prefs?: UserPreferences | null;
 }): Promise<ActivityDetailData | null> {
 	const activity = await getActivityByIdForUser(input.activityId, input.userId);
 	if (!activity) return null;
+	const prefs = input.prefs ?? null;
+	const units: Units = prefs?.units ?? 'imperial';
 
 	const [fileRow, link, streamRaw] = await Promise.all([
 		activity.activityFileId
@@ -316,9 +328,12 @@ export async function getActivityDetail(input: {
 		const hrWidthN = avgHr && maxLapHr > 0 ? Math.round((avgHr / maxLapHr) * 100) : 0;
 		return {
 			label,
-			distance: distM > 0 ? `${(distM / 1000).toFixed(2)} km` : '—',
+			distance:
+				distM > 0
+					? `${distanceLabel(distM, units, 2)} ${distanceUnit(units)}`
+					: '—',
 			time: fmtMs(timeSec),
-			pace: fmtPace(paceSecPerKm),
+			pace: fmtPaceWithUnit(paceSecPerKm, units),
 			avgHr: avgHr ? Math.round(avgHr) : null,
 			hrWidth: `${hrWidthN}%`,
 			kind
@@ -346,34 +361,32 @@ export async function getActivityDetail(input: {
 	}
 
 	// Summary stat bar (8 cells)
-	const distanceKm = (activity.distanceM ?? 0) / 1000;
+	const distanceM = activity.distanceM ?? 0;
+	const distanceKm = distanceM / 1000;
 	const avgPaceSecPerKm =
 		distanceKm > 0 && activity.durationSec && activity.durationSec > 0
 			? activity.durationSec / distanceKm
 			: null;
-	const tss = Math.round(loadFor(activity));
-	const intensityFactor = (() => {
-		if (activity.sport === 'Bike') {
-			const w = activity.normalizedPowerLikeW ?? activity.avgPowerW;
-			if (w && w > 0) return w / 240;
-		}
-		if (activity.sport === 'Run' && activity.avgHr) return activity.avgHr / 160;
-		return null;
-	})();
+	const tss = Math.round(sharedLoadFor(activity, prefs as ThresholdPrefs | null));
+	const intensityFactor = intensityFactorFor(activity, prefs as ThresholdPrefs | null);
 
 	const summaryStats: ActivitySummaryStat[] = [
 		{ label: 'Duration', val: fmtHM(activity.durationSec), unit: '' },
 		{
 			label: 'Distance',
-			val: distanceKm > 0 ? distanceKm.toFixed(2) : '—',
-			unit: distanceKm > 0 ? 'km' : ''
+			val: distanceM > 0 ? distanceLabel(distanceM, units, 2) : '—',
+			unit: distanceM > 0 ? distanceUnit(units) : ''
 		},
 		{ label: 'TSS', val: tss > 0 ? String(tss) : '—', unit: '' },
 		{ label: 'IF', val: intensityFactor !== null ? intensityFactor.toFixed(2) : '—', unit: '' },
 		{
 			label: 'Avg pace',
-			val: avgPaceSecPerKm !== null && activity.sport !== 'Bike' ? fmtMs(avgPaceSecPerKm) : '—',
-			unit: avgPaceSecPerKm !== null && activity.sport !== 'Bike' ? '/km' : ''
+			val:
+				avgPaceSecPerKm !== null && activity.sport !== 'Bike'
+					? paceLabel(avgPaceSecPerKm, units)
+					: '—',
+			unit:
+				avgPaceSecPerKm !== null && activity.sport !== 'Bike' ? paceUnit(units) : ''
 		},
 		{
 			label: 'Avg HR',
@@ -382,8 +395,14 @@ export async function getActivityDetail(input: {
 		},
 		{
 			label: 'Elevation',
-			val: activity.elevationGainM ? String(Math.round(activity.elevationGainM)) : '—',
-			unit: activity.elevationGainM ? 'm' : ''
+			val:
+				activity.elevationGainM !== null && activity.elevationGainM !== undefined
+					? elevationLabel(activity.elevationGainM, units)
+					: '—',
+			unit:
+				activity.elevationGainM !== null && activity.elevationGainM !== undefined
+					? elevationUnit(units)
+					: ''
 		},
 		{
 			label: 'Calories',
@@ -394,8 +413,12 @@ export async function getActivityDetail(input: {
 
 	const route = {
 		hasGps: cumDist.length > 0,
-		distanceLabel: distanceKm > 0 ? `${distanceKm.toFixed(1)} km` : '—',
-		elevationLabel: activity.elevationGainM ? `${Math.round(activity.elevationGainM)} m ↑` : ''
+		distanceLabel:
+			distanceM > 0 ? `${distanceLabel(distanceM, units, 1)} ${distanceUnit(units)}` : '—',
+		elevationLabel:
+			activity.elevationGainM !== null && activity.elevationGainM !== undefined
+				? `${elevationLabel(activity.elevationGainM, units)} ${elevationUnit(units)} ↑`
+				: ''
 	};
 
 	const file = fileRow

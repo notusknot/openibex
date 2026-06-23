@@ -9,6 +9,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const limitRaw = Number(url.searchParams.get('limit') ?? '');
 	const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(500, Math.trunc(limitRaw)) : 50;
 
-	const data = await getActivitiesList({ userId: locals.user.id, limit });
+	const data = await getActivitiesList({
+		userId: locals.user.id,
+		limit,
+		prefs: locals.userPrefs
+	});
 	return { activities: data };
 };

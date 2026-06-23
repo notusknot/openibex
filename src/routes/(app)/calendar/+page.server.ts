@@ -19,7 +19,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		userId: locals.user.id,
 		year,
 		month,
-		now
+		now,
+		prefs: locals.userPrefs
 	});
 
 	return { calendar };

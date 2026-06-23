@@ -34,9 +34,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const result = await getUserFromSessionToken(token);
 	if (result) {
 		event.locals.user = result.user;
+		event.locals.userPrefs = result.prefs;
 		event.locals.sessionTokenHash = result.tokenHash;
 	} else {
 		event.locals.user = null;
+		event.locals.userPrefs = null;
 		event.locals.sessionTokenHash = null;
 		if (token) {
 			event.cookies.delete(SESSION_COOKIE_NAME, { path: '/' });

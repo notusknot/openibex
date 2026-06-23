@@ -6,7 +6,7 @@
 	export let user: { displayName: string | null; email: string; role: string };
 	export let railSummary: {
 		activitiesCount: number;
-		season: { tss: number; hours: number; km: number };
+		season: { tss: number; hours: number; distance: number; distanceUnit: string };
 	} | null = null;
 
 	type TabIcon = 'dashboard' | 'calendar' | 'activities' | 'settings';
@@ -93,7 +93,7 @@
 				<div class="season-label oi-mono">SEASON LOAD</div>
 				<div class="season-val oi-mono">{railSummary.season.tss}</div>
 				<div class="season-sub oi-mono">
-					{railSummary.season.hours}h · {railSummary.season.km} km
+					{railSummary.season.hours}h · {railSummary.season.distance} {railSummary.season.distanceUnit}
 				</div>
 			</div>
 		{/if}

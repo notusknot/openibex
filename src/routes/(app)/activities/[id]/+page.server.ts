@@ -7,7 +7,11 @@ import { deleteWorkoutLinksForActivity } from '$lib/server/repositories/workoutL
 export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!locals.user) throw redirect(303, '/login');
 
-	const detail = await getActivityDetail({ userId: locals.user.id, activityId: params.id });
+	const detail = await getActivityDetail({
+		userId: locals.user.id,
+		activityId: params.id,
+		prefs: locals.userPrefs
+	});
 	if (!detail) throw error(404, 'Not found');
 
 	return { detail };

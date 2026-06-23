@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword } from '$lib/server/security/password';
 import { generateSessionToken, hashSessionToken } from '$lib/server/security/sessionToken';
 import { countUsers, createUser, getUserByEmail, getUserById, updateDisplayName } from '$lib/server/repositories/usersRepository';
 import { createSession, deleteExpiredSessions, deleteSessionByTokenHash, getSessionByTokenHash } from '$lib/server/repositories/sessionsRepository';
-import type { UserRole } from '$lib/server/db/schema';
+import type { Units, UserRole, WeekStart } from '$lib/server/db/schema';
 
 export const SESSION_COOKIE_NAME = 'openibex_session';
 
@@ -13,6 +13,15 @@ export type AuthUser = {
 	email: string;
 	displayName: string | null;
 	role: UserRole;
+};
+
+export type AuthUserPrefs = {
+	ftpWatts: number | null;
+	thresholdHrBpm: number | null;
+	maxHrBpm: number | null;
+	thresholdPaceSecPerKm: number | null;
+	units: Units;
+	weekStart: WeekStart;
 };
 
 export type AuthSession = {
@@ -109,7 +118,7 @@ async function createUserSession(userId: string): Promise<AuthSession> {
 }
 
 export async function getUserFromSessionToken(token: string): Promise<
-	| { user: AuthUser; tokenHash: string }
+	| { user: AuthUser; prefs: AuthUserPrefs; tokenHash: string }
 	| null
 > {
 	if (!token) return null;
@@ -131,7 +140,7 @@ export async function getUserFromSessionToken(token: string): Promise<
 		return null;
 	}
 
-	return { user: toAuthUser(user), tokenHash };
+	return { user: toAuthUser(user), prefs: toAuthUserPrefs(user), tokenHash };
 }
 
 export async function logoutBySessionToken(token: string): Promise<void> {
@@ -144,6 +153,24 @@ export async function logoutBySessionToken(token: string): Promise<void> {
 export async function updateProfileDisplayName(userId: string, displayName: string): Promise<void> {
 	const trimmed = displayName.trim();
 	await updateDisplayName(userId, trimmed.length > 0 ? trimmed : null);
+}
+
+function toAuthUserPrefs(user: {
+	ftpWatts: number | null;
+	thresholdHrBpm: number | null;
+	maxHrBpm: number | null;
+	thresholdPaceSecPerKm: number | null;
+	units: Units;
+	weekStart: WeekStart;
+}): AuthUserPrefs {
+	return {
+		ftpWatts: user.ftpWatts,
+		thresholdHrBpm: user.thresholdHrBpm,
+		maxHrBpm: user.maxHrBpm,
+		thresholdPaceSecPerKm: user.thresholdPaceSecPerKm,
+		units: user.units,
+		weekStart: user.weekStart
+	};
 }
 
 function toAuthUser(user: { id: string; email: string; displayName: string | null; role: UserRole }): AuthUser {

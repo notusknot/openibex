@@ -3,8 +3,9 @@ import { listActivitiesForUserInTimeRange } from '$lib/server/repositories/activ
 import { listWorkoutLinksForPlannedWorkouts } from '$lib/server/repositories/workoutLinksRepository';
 import { listPlannedWorkouts } from '$lib/server/services/plannedWorkoutsService';
 import { ensureAutoMatchesForRange } from '$lib/server/services/workoutMatchingService';
-import { fallbackLoadScore } from '$lib/server/services/analytics/load';
+import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
 import { monthEndDate, monthStartDate } from '$lib/validation/localDate';
+import type { UserPreferences } from '$lib/validation/userPreferences';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -80,22 +81,15 @@ function monthLongLabel(year: number, month: number): string {
 	});
 }
 
-function loadFor(a: {
-	loadScore: number | null;
-	sport: Sport;
-	durationSec: number | null;
-}): number {
-	const score = a.loadScore ?? fallbackLoadScore({ sport: a.sport, durationSec: a.durationSec });
-	return score ?? 0;
-}
-
 export async function getCalendarMonth(input: {
 	userId: string;
 	year: number;
 	month: number; // 1-12
 	now?: Date;
+	prefs?: UserPreferences | null;
 }): Promise<CalendarMonthData> {
 	const { userId, year, month } = input;
+	const prefs = input.prefs ?? null;
 	const fromDate = monthStartDate(year, month);
 	const toDate = monthEndDate(year, month);
 
@@ -139,7 +133,7 @@ export async function getCalendarMonth(input: {
 			sport,
 			sportLabel: a.sport,
 			title: a.title,
-			tss: Math.round(loadFor(a)),
+			tss: Math.round(sharedLoadFor(a, prefs as ThresholdPrefs | null)),
 			planned: false,
 			href: `/activities/${a.id}`
 		});

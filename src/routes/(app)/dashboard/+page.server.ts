@@ -6,6 +6,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user) {
 		throw redirect(303, '/login');
 	}
-	const dashboard = await getDashboardData(locals.user.id);
+	const dashboard = await getDashboardData(locals.user.id, { prefs: locals.userPrefs });
 	return { dashboard };
 };

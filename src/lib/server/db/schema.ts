@@ -10,12 +10,31 @@ export const appMeta = sqliteTable('app_meta', {
 export const userRoles = ['athlete', 'coach', 'admin'] as const;
 export type UserRole = (typeof userRoles)[number];
 
+export const unitsValues = ['metric', 'imperial'] as const;
+export type Units = (typeof unitsValues)[number];
+
+export const weekStartValues = ['mon', 'sun'] as const;
+export type WeekStart = (typeof weekStartValues)[number];
+
 export const users = sqliteTable('users', {
 	id: text('id').primaryKey(),
 	email: text('email').notNull().unique(),
 	passwordHash: text('password_hash').notNull(),
 	displayName: text('display_name'),
 	role: text('role', { enum: userRoles }).notNull().default('athlete'),
+	// Training thresholds — null = use app defaults. Stored as plain numbers
+	// in SI-friendly units regardless of the user's display preference:
+	//   ftpWatts        — cycling functional threshold power
+	//   thresholdHrBpm  — lactate-threshold heart rate
+	//   maxHrBpm        — observed max HR (used as zone reference)
+	//   thresholdPaceSecPerKm — running threshold pace, sec/km internally
+	ftpWatts: integer('ftp_watts'),
+	thresholdHrBpm: integer('threshold_hr_bpm'),
+	maxHrBpm: integer('max_hr_bpm'),
+	thresholdPaceSecPerKm: real('threshold_pace_sec_per_km'),
+	// Display preferences — apply throughout the app, default imperial.
+	units: text('units', { enum: unitsValues }).notNull().default('imperial'),
+	weekStart: text('week_start', { enum: weekStartValues }).notNull().default('mon'),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.notNull()
 		.default(sql`(unixepoch() * 1000)`),

@@ -6,9 +6,10 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	if (!locals.user) {
 		throw redirect(303, '/login');
 	}
-	const railSummary = await getRailSummary(locals.user.id);
+	const railSummary = await getRailSummary(locals.user.id, { prefs: locals.userPrefs });
 	return {
 		user: locals.user,
+		userPrefs: locals.userPrefs,
 		railSummary
 	};
 };

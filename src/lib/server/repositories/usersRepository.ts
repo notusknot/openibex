@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
-import { users, type UserRole } from '$lib/server/db/schema';
+import { users, type Units, type UserRole, type WeekStart } from '$lib/server/db/schema';
 
 export type DbUser = typeof users.$inferSelect;
 export type DbUserInsert = typeof users.$inferInsert;
@@ -53,4 +53,28 @@ export async function updateDisplayName(userId: string, displayName: string | nu
 		.set({ displayName, updatedAt: new Date() })
 		.where(eq(users.id, userId))
 		.run();
+}
+
+export type UserPreferenceUpdate = {
+	ftpWatts?: number | null;
+	thresholdHrBpm?: number | null;
+	maxHrBpm?: number | null;
+	thresholdPaceSecPerKm?: number | null;
+	units?: Units;
+	weekStart?: WeekStart;
+};
+
+export async function updateUserPreferences(
+	userId: string,
+	prefs: UserPreferenceUpdate
+): Promise<void> {
+	const db = getDb();
+	const set: Record<string, unknown> = { updatedAt: new Date() };
+	if ('ftpWatts' in prefs) set.ftpWatts = prefs.ftpWatts ?? null;
+	if ('thresholdHrBpm' in prefs) set.thresholdHrBpm = prefs.thresholdHrBpm ?? null;
+	if ('maxHrBpm' in prefs) set.maxHrBpm = prefs.maxHrBpm ?? null;
+	if ('thresholdPaceSecPerKm' in prefs) set.thresholdPaceSecPerKm = prefs.thresholdPaceSecPerKm ?? null;
+	if ('units' in prefs && prefs.units) set.units = prefs.units;
+	if ('weekStart' in prefs && prefs.weekStart) set.weekStart = prefs.weekStart;
+	db.update(users).set(set).where(eq(users.id, userId)).run();
 }

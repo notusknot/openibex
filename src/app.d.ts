@@ -8,6 +8,14 @@ declare global {
 				displayName: string | null;
 				role: 'athlete' | 'coach' | 'admin';
 			} | null;
+			userPrefs: {
+				ftpWatts: number | null;
+				thresholdHrBpm: number | null;
+				maxHrBpm: number | null;
+				thresholdPaceSecPerKm: number | null;
+				units: 'metric' | 'imperial';
+				weekStart: 'mon' | 'sun';
+			} | null;
 			sessionTokenHash: string | null;
 		}
 	}

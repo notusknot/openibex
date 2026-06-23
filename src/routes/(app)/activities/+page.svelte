@@ -24,7 +24,8 @@
 	$: visibleSummary = {
 		count: shown.length,
 		tss: shown.reduce((acc, r) => acc + r.tss, 0),
-		km: Math.round(shown.reduce((acc, r) => acc + r.distanceKm, 0)),
+		distance: Math.round(shown.reduce((acc, r) => acc + r.distanceDisplay, 0)),
+		distanceUnit: list.summary.distanceUnit,
 		hours: Math.round((shown.reduce((acc, r) => acc + r.durationSec, 0) / 3600) * 10) / 10
 	};
 </script>
@@ -56,7 +57,7 @@
 		<div class="summary-card sum-distance">
 			<div class="sum-label oi-mono">Distance</div>
 			<div class="sum-val oi-mono">
-				{visibleSummary.km}<span class="sum-unit"> km</span>
+				{visibleSummary.distance}<span class="sum-unit"> {visibleSummary.distanceUnit}</span>
 			</div>
 			<div class="sum-sub oi-mono">combined</div>
 		</div>
@@ -109,7 +110,7 @@
 					<span class="sport-tag oi-mono" style="background: {r.color}">{r.tag}</span>
 				</span>
 				<span class="cell-title">{r.title}</span>
-				<span class="cell-num oi-mono">{r.distanceLabel} km</span>
+				<span class="cell-num oi-mono">{r.distanceLabel} {r.distanceUnitLabel}</span>
 				<span class="cell-num oi-mono">{r.durationLabel}</span>
 				<span class="cell-tss oi-mono">{r.tss}</span>
 				<span class="cell-num oi-mono">{r.ifLabel}</span>
