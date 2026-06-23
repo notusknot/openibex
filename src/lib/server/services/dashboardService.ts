@@ -109,8 +109,8 @@ function readinessLabel(v: number): string {
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
-// Position of `v` on a [min,max] track, as a 0–100 percentage.
-const trackPct = (v: number, min: number, max: number) =>
+// Position of `v` on a [min,max] track, as a 0–100 percentage. Exported for tests.
+export const trackPct = (v: number, min: number, max: number) =>
 	max > min ? clamp(((v - min) / (max - min)) * 100, 0, 100) : 0;
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
@@ -128,7 +128,7 @@ const NEUTRAL_INDICATOR: KpiIndicator = {
 // bands are coaching heuristics (CTL/ATL ratios, TSB ranges, monotony cutoffs),
 // not hard rules — tune them here. Several metrics are scaled relative to the
 // athlete's own fitness (CTL) since "ideal" fatigue and weekly load depend on it.
-function buildKpiIndicators(args: {
+export function buildKpiIndicators(args: {
 	ctl: number;
 	atl: number;
 	tsb: number;
