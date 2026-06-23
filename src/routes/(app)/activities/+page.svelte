@@ -1,156 +1,390 @@
 <script lang="ts">
-	export let data: {
-		activities: Array<{
-			id: string;
-			sport: string;
-			title: string;
-			startTime: Date;
-			distanceM: number | null;
-			durationSec: number | null;
-		}>;
-		importJobs: Array<{
-			id: string;
-			status: string;
-			errorMessage: string | null;
-			createdAt: Date;
-		}>;
+	import type { PageData } from './$types';
+
+	export let data: PageData;
+	$: list = data.activities;
+
+	type FilterKey = 'all' | 'swim' | 'bike' | 'run';
+	let filter: FilterKey = 'all';
+
+	const FILTERS: { key: FilterKey; label: string }[] = [
+		{ key: 'all', label: 'All' },
+		{ key: 'swim', label: 'Swim' },
+		{ key: 'bike', label: 'Bike' },
+		{ key: 'run', label: 'Run' }
+	];
+
+	function matchesFilter(sport: string): boolean {
+		return filter === 'all' || sport === filter;
+	}
+
+	// Filter-aware summary, computed reactively in the browser. The server-side
+	// summary is the "all" baseline; this overrides when the user picks a sport.
+	$: shown = list.rows.filter((r) => matchesFilter(r.sport));
+	$: visibleSummary = {
+		count: shown.length,
+		tss: shown.reduce((acc, r) => acc + r.tss, 0),
+		km: Math.round(shown.reduce((acc, r) => acc + r.distanceKm, 0)),
+		hours: Math.round((shown.reduce((acc, r) => acc + r.durationSec, 0) / 3600) * 10) / 10
 	};
-
-	function fmtDistance(m: number | null) {
-		if (m === null) return '';
-		if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
-		return `${Math.round(m)} m`;
-	}
-
-	function fmtDuration(sec: number | null) {
-		if (sec === null) return '';
-		const s = Math.round(sec);
-		const h = Math.floor(s / 3600);
-		const mm = Math.floor((s % 3600) / 60);
-		return h > 0 ? `${h}h ${mm}m` : `${mm}m`;
-	}
 </script>
 
-<div class="headerRow">
-	<h1>Activities</h1>
-	<div class="actions">
-		<a class="button" href="/activities/upload">Upload FIT</a>
+<section class="page">
+	<header class="head">
+		<div>
+			<h1 class="title">Activities</h1>
+			<p class="subtitle oi-mono">{list.totalCount} records · last {list.shownLimit} shown</p>
+		</div>
+		<div class="head-actions">
+			<span class="pill oi-mono" aria-hidden="true">Last 90 days ▾</span>
+			<a class="btn" href="/settings/export">Export CSV</a>
+			<a class="btn btn-primary" href="/activities/upload">Upload .fit</a>
+		</div>
+	</header>
+
+	<div class="summary-strip">
+		<div class="summary-card sum-shown">
+			<div class="sum-label oi-mono">Shown</div>
+			<div class="sum-val oi-mono">{visibleSummary.count}</div>
+			<div class="sum-sub oi-mono">activities</div>
+		</div>
+		<div class="summary-card sum-load">
+			<div class="sum-label oi-mono">Load</div>
+			<div class="sum-val oi-mono">{visibleSummary.tss}</div>
+			<div class="sum-sub oi-mono">total TSS</div>
+		</div>
+		<div class="summary-card sum-distance">
+			<div class="sum-label oi-mono">Distance</div>
+			<div class="sum-val oi-mono">
+				{visibleSummary.km}<span class="sum-unit"> km</span>
+			</div>
+			<div class="sum-sub oi-mono">combined</div>
+		</div>
+		<div class="summary-card sum-time">
+			<div class="sum-label oi-mono">Time</div>
+			<div class="sum-val oi-mono">
+				{visibleSummary.hours}<span class="sum-unit">h</span>
+			</div>
+			<div class="sum-sub oi-mono">moving time</div>
+		</div>
 	</div>
-</div>
 
-<h2>Recent imports</h2>
-{#if data.importJobs.length === 0}
-	<p class="muted">No imports yet.</p>
-{:else}
-	<ul class="imports">
-		{#each data.importJobs as j}
-			<li>
-				<span class="status {j.status}">{j.status}</span>
-				{#if j.errorMessage}
-					<span class="error">{j.errorMessage}</span>
-				{/if}
-				<span class="muted">{new Date(j.createdAt).toLocaleString()}</span>
-			</li>
-		{/each}
-	</ul>
-{/if}
+	<div class="filter-row">
+		<div class="filter-chips">
+			{#each FILTERS as f}
+				<button
+					type="button"
+					class="filter-chip"
+					class:active={filter === f.key}
+					on:click={() => (filter = f.key)}
+					aria-pressed={filter === f.key}
+				>
+					{f.label}
+				</button>
+			{/each}
+		</div>
+		<span class="sort-label oi-mono">Sorted by date ▾</span>
+	</div>
 
-<h2>Recent activities</h2>
-{#if data.activities.length === 0}
-	<p class="muted">No activities yet.</p>
-	<p><a class="buttonSecondary" href="/activities/upload">Upload your first FIT file</a></p>
-{:else}
-	<ul class="list">
-		{#each data.activities as a}
-			<li>
-				<a href={`/activities/${a.id}`}>{a.title}</a>
-				<span class="meta">
-					{a.sport} · {new Date(a.startTime).toLocaleDateString()} {new Date(a.startTime).toLocaleTimeString()}
-					{#if a.distanceM !== null} · {fmtDistance(a.distanceM)}{/if}
-					{#if a.durationSec !== null} · {fmtDuration(a.durationSec)}{/if}
+	<div class="table-wrap">
+		<div class="thead">
+			<span class="th oi-mono">Date</span>
+			<span class="th oi-mono">Sport</span>
+			<span class="th oi-mono">Title</span>
+			<span class="th oi-mono right">Dist</span>
+			<span class="th oi-mono right">Time</span>
+			<span class="th oi-mono right">TSS</span>
+			<span class="th oi-mono right">IF</span>
+			<span class="th oi-mono ifbar-th">IF · Avg HR</span>
+		</div>
+		{#each list.rows as r}
+			<a
+				class="row"
+				class:dim={!matchesFilter(r.sport)}
+				href="/activities/{r.id}"
+				title={r.title}
+			>
+				<span class="cell-date oi-mono">{r.date}</span>
+				<span class="cell-tag">
+					<span class="sport-tag oi-mono" style="background: {r.color}">{r.tag}</span>
 				</span>
-			</li>
+				<span class="cell-title">{r.title}</span>
+				<span class="cell-num oi-mono">{r.distanceLabel} km</span>
+				<span class="cell-num oi-mono">{r.durationLabel}</span>
+				<span class="cell-tss oi-mono">{r.tss}</span>
+				<span class="cell-num oi-mono">{r.ifLabel}</span>
+				<span class="cell-ifbar">
+					<span class="ifbar-track">
+						<span class="ifbar-fill" style="width: {r.ifPctWidth}; background: {r.color}"></span>
+					</span>
+					<span class="cell-hr oi-mono">{r.hrLabel}</span>
+				</span>
+			</a>
 		{/each}
-	</ul>
-{/if}
+		<div class="tfoot">
+			<span class="oi-mono tfoot-count">
+				Showing {shown.length} of {list.totalCount}
+			</span>
+			{#if list.totalCount > list.shownLimit}
+				<a class="btn btn-small" href="/activities?limit={Math.min(500, list.shownLimit + 50)}">
+					Load more
+				</a>
+			{/if}
+		</div>
+	</div>
+</section>
 
 <style>
-	.headerRow {
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.head {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 12px;
+	}
+	.title {
+		font-size: 22px;
+		font-weight: 700;
+		color: var(--ink2);
+		line-height: 1;
+		margin: 0;
+	}
+	.subtitle {
+		font-size: 11px;
+		color: var(--muted);
+		margin: 5px 0 0;
+	}
+	.head-actions {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+	.pill {
+		font-size: 11px;
+		color: var(--btn-ink);
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 7px;
+		padding: 8px 12px;
+	}
+	.btn {
+		font: 600 12px 'Archivo', system-ui, sans-serif;
+		color: var(--btn-ink);
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 7px;
+		padding: 8px 13px;
+		cursor: pointer;
+		text-decoration: none;
+		line-height: 1.2;
+	}
+	.btn-primary {
+		color: #fff;
+		background: var(--green);
+		border-color: transparent;
+		padding: 8px 14px;
+	}
+	.btn-small {
+		padding: 6px 12px;
+		font-size: 11px;
+	}
+
+	.summary-strip {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 10px;
+	}
+	.summary-card {
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-top: 2px solid var(--green);
+		border-radius: 8px;
+		padding: 12px 14px;
+	}
+	.sum-shown {
+		border-top-color: var(--green);
+	}
+	.sum-load {
+		border-top-color: var(--c-fat);
+	}
+	.sum-distance {
+		border-top-color: var(--run);
+	}
+	.sum-time {
+		border-top-color: var(--c-form);
+	}
+	.sum-label {
+		font-size: 8.5px;
+		letter-spacing: 0.08em;
+		color: var(--faint);
+		text-transform: uppercase;
+	}
+	.sum-val {
+		font-size: 24px;
+		font-weight: 600;
+		color: var(--ink);
+		margin-top: 6px;
+		line-height: 1;
+	}
+	.sum-unit {
+		font-size: 13px;
+		color: var(--faint);
+		margin-left: 2px;
+	}
+	.sum-sub {
+		font-size: 9.5px;
+		color: var(--muted);
+		margin-top: 5px;
+	}
+
+	.filter-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 12px;
 	}
-
-	.button {
-		padding: 10px 12px;
-		border: 1px solid #0f172a;
-		border-radius: 10px;
-		background: #0f172a;
-		color: white;
-		text-decoration: none;
-		font-weight: 600;
-	}
-
-	.buttonSecondary {
-		padding: 10px 12px;
-		border: 1px solid #cbd5e1;
-		border-radius: 10px;
-		background: white;
-		color: #0f172a;
-		text-decoration: none;
-		font-weight: 600;
-		display: inline-block;
-	}
-
-	.muted {
-		color: #64748b;
-	}
-
-	.imports,
-	.list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: grid;
-		gap: 10px;
-	}
-
-	.imports li,
-	.list li {
-		padding: 12px;
-		border: 1px solid #e2e8f0;
-		border-radius: 12px;
-		background: white;
-		display: grid;
+	.filter-chips {
+		display: flex;
 		gap: 6px;
 	}
-
-	.meta {
-		color: #475569;
-		font-size: 0.92rem;
-	}
-
-	.status {
-		width: fit-content;
-		padding: 2px 8px;
+	.filter-chip {
+		font: 600 11px 'Archivo', system-ui, sans-serif;
+		padding: 6px 12px;
 		border-radius: 999px;
-		border: 1px solid #cbd5e1;
-		font-size: 0.85rem;
-		text-transform: lowercase;
+		cursor: pointer;
+		border: 1px solid var(--line);
+		background: var(--card);
+		color: var(--btn-ink);
+		line-height: 1;
+	}
+	.filter-chip.active {
+		background: var(--green);
+		color: #fff;
+		border-color: transparent;
+	}
+	.sort-label {
+		font-size: 11px;
+		color: var(--faint);
 	}
 
-	.status.succeeded {
-		border-color: #059669;
-		color: #047857;
+	.table-wrap {
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		overflow: hidden;
+	}
+	.thead,
+	.row {
+		display: grid;
+		grid-template-columns: 104px 64px minmax(0, 1fr) 78px 70px 56px 56px 130px;
+		align-items: center;
+		padding: 0 16px;
+	}
+	.thead {
+		border-bottom: 1px solid var(--line);
+		background: var(--bg-soft);
+	}
+	.th {
+		font-size: 8.5px;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		text-transform: uppercase;
+		font-weight: 600;
+		padding: 10px 0;
+	}
+	.th.right {
+		text-align: right;
+	}
+	.th.ifbar-th {
+		padding-left: 14px;
 	}
 
-	.status.failed {
-		border-color: #b91c1c;
-		color: #b91c1c;
+	.row {
+		border-bottom: 1px solid var(--line);
+		text-decoration: none;
+		transition: opacity 120ms ease, background 120ms ease;
+	}
+	.row:hover {
+		background: var(--bg-soft);
+	}
+	.row.dim {
+		opacity: 0.32;
+	}
+	.cell-date {
+		font-size: 11px;
+		color: var(--ink-soft);
+		padding: 11px 0;
+	}
+	.cell-tag {
+		padding: 11px 0;
+	}
+	.sport-tag {
+		font-size: 8.5px;
+		font-weight: 600;
+		color: #fff;
+		border-radius: 3px;
+		padding: 2px 6px;
+	}
+	.cell-title {
+		font-size: 12.5px;
+		font-weight: 600;
+		color: var(--ink);
+		padding: 11px 8px 11px 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
+	}
+	.cell-num {
+		font-size: 11px;
+		color: var(--ink-soft);
+		padding: 11px 0;
+		text-align: right;
+	}
+	.cell-tss {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink2);
+		padding: 11px 0;
+		text-align: right;
+	}
+	.cell-ifbar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 11px 0 11px 14px;
+	}
+	.ifbar-track {
+		flex: 1;
+		height: 5px;
+		background: var(--track);
+		border-radius: 3px;
+		overflow: hidden;
+	}
+	.ifbar-fill {
+		display: block;
+		height: 100%;
+	}
+	.cell-hr {
+		font-size: 10.5px;
+		color: var(--muted);
+		width: 30px;
+		text-align: right;
 	}
 
-	.error {
-		color: #b91c1c;
+	.tfoot {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 12px 16px;
+		background: var(--bg-soft);
+	}
+	.tfoot-count {
+		font-size: 10.5px;
+		color: var(--faint);
 	}
 </style>

@@ -1,6 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import zlib from 'node:zlib';
+import { promisify } from 'node:util';
 import { getEnv } from '$lib/server/env';
+
+const gunzip = promisify(zlib.gunzip);
 
 export function uploadRelativePath(userId: string, sha256: string, ext: string): string {
 	return path.posix.join('uploads', userId, `${sha256}.${ext}`);
@@ -41,5 +45,24 @@ export async function readUploadFile(relativePath: string): Promise<Uint8Array> 
 	const env = getEnv();
 	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, relativePath);
 	return fs.readFile(absolutePath);
+}
+
+export async function readStreamBlob(activityId: string): Promise<unknown | null> {
+	const env = getEnv();
+	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, streamRelativePath(activityId));
+	let gzipped: Buffer;
+	try {
+		gzipped = await fs.readFile(absolutePath);
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException)?.code;
+		if (code === 'ENOENT') return null;
+		throw err;
+	}
+	const raw = await gunzip(gzipped);
+	try {
+		return JSON.parse(raw.toString('utf-8'));
+	} catch {
+		return null;
+	}
 }
 
