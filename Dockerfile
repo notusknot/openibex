@@ -23,10 +23,15 @@ FROM node:22-bookworm-slim AS run
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=build /app/build ./build
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/drizzle ./drizzle
+# Run as the image's built-in non-root user (uid 1000). Build artifacts are
+# owned by it; the bind-mounted /data must be writable by uid 1000 on the host.
+COPY --from=build --chown=node:node /app/build ./build
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/drizzle ./drizzle
+
+RUN mkdir -p /data && chown node:node /data
+USER node
 
 EXPOSE 3000
 

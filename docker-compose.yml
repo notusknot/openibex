@@ -24,8 +24,13 @@ services:
       # Override to https://your.domain when running behind a reverse proxy.
       - ORIGIN=${ORIGIN:-http://localhost:3000}
     volumes:
+      # The container runs as uid 1000 (non-root); ensure ./data on the host is
+      # writable by uid 1000 (e.g. `chown -R 1000:1000 ./data`).
       - ./data:/data
     restart: unless-stopped
+    # Let the graceful-shutdown handler drain in-flight writes + checkpoint the
+    # WAL before Docker escalates to SIGKILL (the drain timeout is 10s).
+    stop_grace_period: 30s
     healthcheck:
       test:
         - CMD
