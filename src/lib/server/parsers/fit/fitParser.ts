@@ -1,14 +1,17 @@
+import { Worker } from 'node:worker_threads';
 import type { Sport } from '$lib/server/db/schema';
 
 const PARSER_VERSION = 'fit-file-parser';
 
 // ~70h at 1 Hz — beyond any real activity, ultras included. Bounds the cost of
-// the synchronous JSON.stringify + gzip the callers run on the stream, so a
-// crafted/corrupt FIT with a pathological records array can't hang the event
-// loop. fit-file-parser is synchronous, so a Promise timeout can't interrupt the
-// parse itself — bounding the output (and the already-capped input) is the
-// effective guard.
+// the synchronous JSON.stringify + gzip the callers run on the stream, and is
+// also enforced inside the worker so a pathological array is never cloned back.
 const MAX_STREAM_RECORDS = 250_000;
+
+// fit-file-parser is synchronous and CPU-bound; a crafted/corrupt file can burn
+// seconds. We run it in a worker thread and terminate it past this deadline so it
+// can never hang the server's event loop.
+const FIT_PARSE_TIMEOUT_MS = 15_000;
 
 export class FitNotAnActivityError extends Error {
 	constructor(message: string) {
@@ -21,6 +24,13 @@ export class FitStreamTooLargeError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = 'FitStreamTooLargeError';
+	}
+}
+
+export class FitParseTimeoutError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'FitParseTimeoutError';
 	}
 }
 
@@ -87,28 +97,13 @@ export type FitParseResult = {
 	parserVersion: string;
 };
 
-export async function parseFit(buffer: Uint8Array, originalFilename: string): Promise<FitParseResult> {
-	const mod: any = await import('fit-file-parser');
-	// fit-file-parser is published as CJS; in ESM contexts this often becomes `mod.default.default`.
-	const FitParser = mod?.default?.default ?? mod?.default ?? mod;
-	if (typeof FitParser !== 'function') {
-		throw new Error('FIT parser module did not export a constructor.');
-	}
-	const parser = new FitParser({
-		force: true,
-		mode: 'both',
-		lengthUnit: 'm',
-		speedUnit: 'm/s',
-		elapsedRecordField: true
-	});
-
-	const fitData: any = await new Promise((resolve, reject) => {
-		parser.parse(buffer, (err: Error | null, data: any) => {
-			if (err) reject(err);
-			else resolve(data);
-		});
-	});
-
+/**
+ * Pure mapping from the raw fit-file-parser output to our summary + stream.
+ * Exported so the mapping/field-extraction logic can be unit-tested directly
+ * with crafted fitData, without spawning a worker or running the real library.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapFitData(fitData: any, originalFilename: string): FitParseResult {
 	const session = Array.isArray(fitData?.sessions) ? fitData.sessions[0] : fitData?.session;
 	if (!session) {
 		throw new FitNotAnActivityError(
@@ -135,9 +130,7 @@ export async function parseFit(buffer: Uint8Array, originalFilename: string): Pr
 	const records = fitData?.records ?? null;
 	const laps = fitData?.laps ?? null;
 	if (Array.isArray(records) && records.length > MAX_STREAM_RECORDS) {
-		throw new FitStreamTooLargeError(
-			`FIT stream has ${records.length} records (max ${MAX_STREAM_RECORDS}).`
-		);
+		throw new FitStreamTooLargeError(`FIT stream has ${records.length} records (max ${MAX_STREAM_RECORDS}).`);
 	}
 	const stream = { records, laps };
 
@@ -160,4 +153,76 @@ export async function parseFit(buffer: Uint8Array, originalFilename: string): Pr
 		stream,
 		parserVersion: PARSER_VERSION
 	};
+}
+
+// CommonJS worker body (run via `new Worker(..., { eval: true })`, so there is no
+// separate file for the bundler to resolve). It requires fit-file-parser at
+// runtime from node_modules, runs the synchronous parse off the main event loop,
+// and rejects an over-cap stream before it can be serialized back to the host.
+const WORKER_SOURCE = `
+const { parentPort, workerData } = require('node:worker_threads');
+try {
+  const mod = require('fit-file-parser');
+  const FitParser = (mod && mod.default && mod.default.default) || (mod && mod.default) || mod;
+  if (typeof FitParser !== 'function') {
+    parentPort.postMessage({ error: 'parse_error', message: 'FIT parser module did not export a constructor.' });
+  } else {
+    const parser = new FitParser({ force: true, mode: 'both', lengthUnit: 'm', speedUnit: 'm/s', elapsedRecordField: true });
+    parser.parse(workerData.bytes, (err, data) => {
+      if (err) { parentPort.postMessage({ error: 'parse_error', message: String((err && err.message) || err) }); return; }
+      if (data && Array.isArray(data.records) && data.records.length > workerData.maxRecords) {
+        parentPort.postMessage({ error: 'too_large', count: data.records.length }); return;
+      }
+      parentPort.postMessage({ ok: true, data });
+    });
+  }
+} catch (e) {
+  parentPort.postMessage({ error: 'parse_error', message: String((e && e.message) || e) });
+}
+`;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function runFitParseWorker(buffer: Uint8Array, timeoutMs: number): Promise<any> {
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		const worker = new Worker(WORKER_SOURCE, {
+			eval: true,
+			workerData: { bytes: buffer, maxRecords: MAX_STREAM_RECORDS }
+		});
+		const finish = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			void worker.terminate();
+			fn();
+		};
+		const timer = setTimeout(() => {
+			finish(() => reject(new FitParseTimeoutError(`FIT parse exceeded ${timeoutMs}ms.`)));
+		}, timeoutMs);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		worker.on('message', (msg: any) => {
+			if (msg?.error === 'too_large') {
+				finish(() =>
+					reject(new FitStreamTooLargeError(`FIT stream has ${msg.count} records (max ${MAX_STREAM_RECORDS}).`))
+				);
+			} else if (msg?.error) {
+				finish(() => reject(new Error(msg.message || 'FIT parse failed.')));
+			} else {
+				finish(() => resolve(msg?.data));
+			}
+		});
+		worker.on('error', (err) => finish(() => reject(err)));
+		worker.on('exit', (code) => {
+			if (code !== 0) finish(() => reject(new Error(`FIT parse worker exited with code ${code}.`)));
+		});
+	});
+}
+
+export async function parseFit(
+	buffer: Uint8Array,
+	originalFilename: string,
+	opts: { timeoutMs?: number } = {}
+): Promise<FitParseResult> {
+	const fitData = await runFitParseWorker(buffer, opts.timeoutMs ?? FIT_PARSE_TIMEOUT_MS);
+	return mapFitData(fitData, originalFilename);
 }
