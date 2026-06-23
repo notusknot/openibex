@@ -2,10 +2,25 @@ import type { Sport } from '$lib/server/db/schema';
 
 const PARSER_VERSION = 'fit-file-parser';
 
+// ~70h at 1 Hz — beyond any real activity, ultras included. Bounds the cost of
+// the synchronous JSON.stringify + gzip the callers run on the stream, so a
+// crafted/corrupt FIT with a pathological records array can't hang the event
+// loop. fit-file-parser is synchronous, so a Promise timeout can't interrupt the
+// parse itself — bounding the output (and the already-capped input) is the
+// effective guard.
+const MAX_STREAM_RECORDS = 250_000;
+
 export class FitNotAnActivityError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = 'FitNotAnActivityError';
+	}
+}
+
+export class FitStreamTooLargeError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'FitStreamTooLargeError';
 	}
 }
 
@@ -117,10 +132,14 @@ export async function parseFit(buffer: Uint8Array, originalFilename: string): Pr
 
 	const title = composeFallbackTitle({ originalFilename, sport, startTime });
 
-	const stream = {
-		records: fitData?.records ?? null,
-		laps: fitData?.laps ?? null
-	};
+	const records = fitData?.records ?? null;
+	const laps = fitData?.laps ?? null;
+	if (Array.isArray(records) && records.length > MAX_STREAM_RECORDS) {
+		throw new FitStreamTooLargeError(
+			`FIT stream has ${records.length} records (max ${MAX_STREAM_RECORDS}).`
+		);
+	}
+	const stream = { records, laps };
 
 	return {
 		summary: {
