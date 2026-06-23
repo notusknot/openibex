@@ -26,6 +26,8 @@ export type OpenIbexEnv = {
 	// credential exists; src/lib/server/sync/crypto.ts throws a clear error
 	// if it's needed but missing/malformed.
 	SYNC_ENCRYPTION_KEY?: string;
+	// pino log level: fatal|error|warn|info|debug|trace|silent (default info).
+	LOG_LEVEL: string;
 };
 
 function readEnv(name: string): string | undefined {
@@ -46,6 +48,9 @@ export function getEnv(): OpenIbexEnv {
 	if (!Number.isFinite(sessionTtlDays) || sessionTtlDays <= 0) {
 		throw new Error('SESSION_TTL_DAYS must be a positive number (example: 30)');
 	}
+	const validLogLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
+	const logLevelRaw = (readEnv('LOG_LEVEL') ?? 'info').toLowerCase();
+	const logLevel = validLogLevels.includes(logLevelRaw) ? logLevelRaw : 'info';
 	return {
 		DATABASE_URL: readEnv('DATABASE_URL') ?? `file:${path.join(dataDir, 'openibex.db')}`,
 		OPENIBEX_DATA_DIR: dataDir,
@@ -59,6 +64,7 @@ export function getEnv(): OpenIbexEnv {
 		SESSION_SECRET: readEnv('SESSION_SECRET'),
 		SESSION_TTL_DAYS: sessionTtlDays,
 		ORIGIN: readEnv('ORIGIN'),
-		SYNC_ENCRYPTION_KEY: readEnv('SYNC_ENCRYPTION_KEY')
+		SYNC_ENCRYPTION_KEY: readEnv('SYNC_ENCRYPTION_KEY'),
+		LOG_LEVEL: logLevel
 	};
 }

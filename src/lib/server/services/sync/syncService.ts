@@ -28,6 +28,7 @@ import { createImportItem, updateImportItem } from '$lib/server/repositories/imp
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 import { beginCriticalWork, endCriticalWork, isShuttingDown } from '$lib/server/shutdown';
+import { getLogger } from '$lib/server/logger';
 import {
 	getSyncJob,
 	isSyncJobRunning,
@@ -189,6 +190,7 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 
 	beginCriticalWork(); // graceful shutdown drains this before checkpoint + close
 	let release: SyncJobRelease = { ok: false, status: 'error', error: null };
+	getLogger().info({ userId }, 'garmin sync: start');
 	const openSession = opts.openSession ?? openGarminSession;
 
 	const batchId = crypto.randomUUID();
@@ -413,6 +415,7 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 		const advancedAt = cursorMs > (sinceMs ?? 0) ? new Date(cursorMs) : undefined;
 		await updateGarminSyncStatus({ userId, lastSyncAt: advancedAt, lastSyncStatus: 'ok', lastSyncError: null });
 
+		getLogger().info({ userId, imported, duplicate, unsupported, failed }, 'garmin sync: ok');
 		release = { ok: true, status: 'ok' };
 		return { outcome: 'ok', imported, duplicate, unsupported, failed, batchId };
 	} catch (err) {
@@ -426,6 +429,7 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 		// error); fold rate_limited into 'error' there. The sync_jobs row keeps
 		// the precise status — it drives the breaker's hard vs soft cool-down.
 		const credStatus = outcome === 'auth_failed' ? 'auth_failed' : 'error';
+		getLogger().warn({ userId, outcome, reason: message }, 'garmin sync: failed');
 		await updateGarminSyncStatus({ userId, lastSyncStatus: credStatus, lastSyncError: message });
 		await updateImportBatchProgress({ id: batchId, userId, status: 'failed', completedAt: new Date() }).catch(() => {});
 		release = { ok: false, status: outcome, error: message };

@@ -1,4 +1,6 @@
 import { checkpointAndCloseDb } from '$lib/server/db/client';
+import { getLogger } from '$lib/server/logger';
+import { getEnv } from '$lib/server/env';
 
 // Docker sends SIGTERM on every deploy, restart, and `docker stop`, then
 // SIGKILLs after a grace period. If the process dies mid-write we risk a
@@ -41,14 +43,14 @@ async function drain(timeoutMs = 10_000): Promise<void> {
 async function shutdown(signal: string): Promise<void> {
 	if (shuttingDown) return;
 	shuttingDown = true;
-	console.log(`[shutdown] ${signal} received, draining ${inFlight} in-flight write(s)…`);
+	getLogger().info({ signal, inFlight }, 'shutdown: draining in-flight writes');
 	try {
 		await drain();
 		checkpointAndCloseDb();
-		console.log('[shutdown] db checkpointed and closed cleanly');
+		getLogger().info('shutdown: db checkpointed and closed cleanly');
 		process.exit(0);
 	} catch (err) {
-		console.error('[shutdown] error during shutdown', err);
+		getLogger().error({ err }, 'shutdown: error during shutdown');
 		process.exit(1);
 	}
 }
@@ -59,6 +61,11 @@ let registered = false;
  * (hooks.server.ts) so it runs at startup. Safe to call repeatedly. */
 export function registerShutdownHandlers(): void {
 	if (registered) return;
+	// Don't install process-exiting signal handlers under test: vitest sends
+	// SIGTERM to its workers at teardown and we'd hijack it to call process.exit.
+	// process.env.VITEST is set by the runner before any module loads (NODE_ENV
+	// isn't 'test' yet at this import-time call), so it's the reliable signal.
+	if (process.env.VITEST || getEnv().NODE_ENV === 'test') return;
 	registered = true;
 	for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 		process.on(sig, () => void shutdown(sig));

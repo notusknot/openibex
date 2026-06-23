@@ -14,6 +14,7 @@ import {
 import { GarminAuthError, GarminMfaUnsupportedError, login, redactGarminError } from '$lib/server/sync/garmin';
 import { sealJson } from '$lib/server/sync/crypto';
 import { isUserSyncing, syncForUser } from '$lib/server/services/sync/syncService';
+import { getLogger } from '$lib/server/logger';
 
 // Sanitized view of the Garmin credential for the page — never exposes the
 // encrypted token blob to the client.
@@ -100,7 +101,7 @@ export const actions: Actions = {
 			// library message, so the remaining errors here are safe to redact +
 			// surface. Log too, so it's visible in server output.
 			const detail = redactGarminError(err);
-			console.error('[garmin] connect failed:', detail);
+			getLogger().error({ detail }, 'garmin connect failed');
 			return fail(400, { garminError: `Could not connect: ${detail}` });
 		}
 		return { garminConnected: true };
