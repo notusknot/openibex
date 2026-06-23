@@ -159,6 +159,7 @@
 										class:completed={!s.planned}
 										class:dim={filter !== 'all' && s.sport !== filter}
 										href={s.href}
+										title={s.title}
 									>
 										<span class="cal-chip-dot" aria-hidden="true"></span>
 										<span class="cal-chip-title">{s.title}</span>
@@ -470,7 +471,9 @@
 	}
 	.cal-grid {
 		display: grid;
-		grid-template-columns: repeat(7, 1fr) 108px;
+		/* minmax(0, 1fr) — without the 0 min, a long unbreakable title in any
+		   cell would let that column stretch past its fair share. */
+		grid-template-columns: repeat(7, minmax(0, 1fr)) 108px;
 	}
 	.cal-dow {
 		font-size: 9px;
@@ -488,6 +491,7 @@
 
 	.cal-cell {
 		min-height: 104px;
+		min-width: 0;
 		padding: 9px 10px;
 		border-bottom: 1px solid var(--line);
 		border-left: 1px solid var(--line);
