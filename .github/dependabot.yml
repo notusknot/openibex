@@ -1,0 +1,22 @@
+# Dependency scanning for OpenIbex. Dependabot is GitHub-native (it reads
+# pnpm-lock.yaml, opens update PRs, and surfaces security advisories) — it is not
+# a CI workflow and runs no test/build pipeline.
+version: 2
+updates:
+  - package-ecosystem: "npm" # covers pnpm via pnpm-lock.yaml
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # Batch routine updates into a few PRs; security updates still come through
+    # individually and immediately.
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+      production-dependencies:
+        dependency-type: "production"
+    # garmin-connect is an unofficial, pinned client — review each bump by hand
+    # rather than auto-grouping it (see the pin in package.json).
+    ignore:
+      - dependency-name: "garmin-connect"
+        update-types: ["version-update:semver-major"]

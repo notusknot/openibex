@@ -26,7 +26,8 @@
     "import:garmin": "tsx scripts/import-garmin.ts",
     "analytics:rebuild": "tsx scripts/rebuild-daily-metrics.ts",
     "titles:backfill": "tsx scripts/backfill-activity-titles.ts",
-    "cleanup:ghosts": "tsx scripts/cleanup-ghost-activities.ts"
+    "cleanup:ghosts": "tsx scripts/cleanup-ghost-activities.ts",
+    "audit": "pnpm audit --prod"
   },
   "dependencies": {
     "@sveltejs/adapter-node": "^2.0.0",
