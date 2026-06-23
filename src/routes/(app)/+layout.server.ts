@@ -1,7 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { getRailSummary } from '$lib/server/services/appShellService';
-import { maybeTriggerAutoSync } from '$lib/server/services/sync/syncService';
+import { getSyncStatusForUser, maybeTriggerAutoSync } from '$lib/server/services/sync/syncService';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	if (!locals.user) {
@@ -11,9 +11,11 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	// navigation. Fire-and-forget + throttled, so it never delays this load.
 	void maybeTriggerAutoSync(locals.user.id);
 	const railSummary = await getRailSummary(locals.user.id, { prefs: locals.userPrefs });
+	const garminSync = await getSyncStatusForUser(locals.user.id);
 	return {
 		user: locals.user,
 		userPrefs: locals.userPrefs,
-		railSummary
+		railSummary,
+		garminSync
 	};
 };

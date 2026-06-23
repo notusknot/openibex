@@ -29,6 +29,7 @@ import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStora
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 import { beginCriticalWork, endCriticalWork, isShuttingDown } from '$lib/server/shutdown';
 import {
+	getSyncJob,
 	isSyncJobRunning,
 	releaseSyncJob,
 	tryAcquireSyncJob,
@@ -76,6 +77,46 @@ export type SyncOptions = {
 // the sync_jobs throttle timestamp.
 export function isUserSyncing(userId: string): boolean {
 	return isSyncJobRunning(userId);
+}
+
+export type SyncUiState =
+	| 'not_connected'
+	| 'never'
+	| 'syncing'
+	| 'ok'
+	| 'failing'
+	| 'rate_limited'
+	| 'reconnect';
+
+export type SyncStatusSummary = {
+	state: SyncUiState;
+	/** ms epoch of the import cursor's last advance (newest imported activity). */
+	lastSyncAt: number | null;
+	/** ms epoch when the breaker cool-down ends (failing/rate_limited), else null. */
+	retryAt: number | null;
+};
+
+/** Derived, page-safe Garmin sync status for the app shell. Cheap indexed reads;
+ * never throws (the shell renders regardless of sync health). */
+export async function getSyncStatusForUser(userId: string): Promise<SyncStatusSummary> {
+	try {
+		const cred = await getGarminCredentialForUser(userId);
+		if (!cred) return { state: 'not_connected', lastSyncAt: null, retryAt: null };
+		const lastSyncAt = cred.lastSyncAt ? cred.lastSyncAt.getTime() : null;
+		if (isUserSyncing(userId)) return { state: 'syncing', lastSyncAt, retryAt: null };
+		if (cred.lastSyncStatus === 'auth_failed') return { state: 'reconnect', lastSyncAt, retryAt: null };
+		const job = getSyncJob(userId);
+		const retryAt = job?.cooldownUntil ? job.cooldownUntil.getTime() : null;
+		if (cred.lastSyncStatus === 'error') {
+			// rate_limited is folded into the credential's 'error'; sync_jobs keeps it precise.
+			const state: SyncUiState = job?.lastStatus === 'rate_limited' ? 'rate_limited' : 'failing';
+			return { state, lastSyncAt, retryAt };
+		}
+		if (lastSyncAt || cred.lastSyncStatus === 'ok') return { state: 'ok', lastSyncAt, retryAt: null };
+		return { state: 'never', lastSyncAt: null, retryAt: null };
+	} catch {
+		return { state: 'not_connected', lastSyncAt: null, retryAt: null };
+	}
 }
 
 /** Fire-and-forget auto-sync, throttled to once per AUTO_SYNC_INTERVAL_MS per

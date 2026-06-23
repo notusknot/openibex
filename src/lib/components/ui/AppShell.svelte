@@ -8,6 +8,11 @@
 		activitiesCount: number;
 		season: { tss: number; hours: number; distance: number; distanceUnit: string };
 	} | null = null;
+	export let garminSync: {
+		state: 'not_connected' | 'never' | 'syncing' | 'ok' | 'failing' | 'rate_limited' | 'reconnect';
+		lastSyncAt: number | null;
+		retryAt: number | null;
+	} | null = null;
 
 	type TabIcon = 'dashboard' | 'calendar' | 'activities' | 'settings';
 
@@ -54,6 +59,43 @@
 		return base.slice(0, 2).toUpperCase();
 	}
 
+	// ── Garmin sync chip ───────────────────────────────────────────────────
+	function relTime(ms: number): string {
+		const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+		if (s < 60) return 'just now';
+		const m = Math.round(s / 60);
+		if (m < 60) return `${m}m ago`;
+		const h = Math.round(m / 60);
+		if (h < 24) return `${h}h ago`;
+		return `${Math.round(h / 24)}d ago`;
+	}
+	function retryIn(ms: number): string {
+		const s = Math.round((ms - Date.now()) / 1000);
+		if (s <= 0) return 'soon';
+		const m = Math.ceil(s / 60);
+		return m < 60 ? `${m}m` : `${Math.ceil(m / 60)}h`;
+	}
+	function syncLabelFor(g: NonNullable<typeof garminSync>): string {
+		switch (g.state) {
+			case 'syncing':
+				return 'Syncing…';
+			case 'ok':
+				return g.lastSyncAt ? `Synced ${relTime(g.lastSyncAt)}` : 'Synced';
+			case 'never':
+				return 'Not synced yet';
+			case 'failing':
+				return g.retryAt ? `Sync failing · retry ${retryIn(g.retryAt)}` : 'Sync failing';
+			case 'rate_limited':
+				return g.retryAt ? `Rate-limited · retry ${retryIn(g.retryAt)}` : 'Rate-limited';
+			case 'reconnect':
+				return 'Reconnect needed';
+			default:
+				return '';
+		}
+	}
+	$: showSync = garminSync && garminSync.state !== 'not_connected';
+	$: syncLabel = garminSync ? syncLabelFor(garminSync) : '';
+
 	// `current` must be passed explicitly so the {@const} in the each block
 	// has pathname as a tracked dependency — Svelte's compiler doesn't trace
 	// into function bodies, so reading $page from inside this function would
@@ -96,6 +138,13 @@
 					{railSummary.season.hours}h · {railSummary.season.distance} {railSummary.season.distanceUnit}
 				</div>
 			</div>
+		{/if}
+
+		{#if showSync && garminSync}
+			<a class="sync-chip" href="/settings" title={syncLabel}>
+				<span class="sync-dot" data-state={garminSync.state} aria-hidden="true" />
+				<span class="sync-text oi-mono">{syncLabel}</span>
+			</a>
 		{/if}
 
 		<form method="POST" action="/logout" class="logout-form">
@@ -407,6 +456,59 @@
 		border-left: 1.5px solid var(--rail-faint);
 		border-bottom: 1.5px solid var(--rail-faint);
 		flex: none;
+	}
+
+	.sync-chip {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin-top: 12px;
+		padding: 7px 11px;
+		border-radius: 7px;
+		border: 1px solid var(--rail-line);
+		text-decoration: none;
+		color: var(--rail-mut);
+		min-width: 0;
+	}
+	.sync-chip:hover {
+		color: var(--rail-ink);
+		border-color: var(--rail-faint);
+	}
+	.sync-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex: none;
+		background: var(--rail-faint);
+	}
+	.sync-dot[data-state='ok'] {
+		background: var(--green);
+	}
+	.sync-dot[data-state='syncing'] {
+		background: var(--gold);
+		animation: sync-pulse 1.4s ease-in-out infinite;
+	}
+	.sync-dot[data-state='rate_limited'] {
+		background: var(--gold);
+	}
+	.sync-dot[data-state='failing'],
+	.sync-dot[data-state='reconnect'] {
+		background: var(--danger);
+	}
+	.sync-text {
+		font-size: 10px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	@keyframes sync-pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.35;
+		}
 	}
 
 	.user-foot {

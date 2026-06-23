@@ -7,7 +7,7 @@
 
 <a class="skip" href="#main">Skip to content</a>
 
-<AppShell user={data.user} railSummary={data.railSummary}>
+<AppShell user={data.user} railSummary={data.railSummary} garminSync={data.garminSync}>
 	<slot />
 </AppShell>
 
