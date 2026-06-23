@@ -30,4 +30,9 @@ COPY --from=build /app/drizzle ./drizzle
 
 EXPOSE 3000
 
+# Liveness: hit the app's health endpoint. Node 22 has a global fetch, so no
+# curl is needed in the slim image. Reports unhealthy if the DB ping fails (503).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "build"]
