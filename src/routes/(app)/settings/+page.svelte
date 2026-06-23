@@ -7,21 +7,27 @@
 	export let form: ActionData;
 
 	$: user = data.user;
-	$: prefs = data.userPrefs;
-	$: displayName = user.displayName ?? '';
 	$: initials = computeInitials(user.displayName ?? user.email);
 
 	let saving = false;
 	let saved = false;
 
-	// Form-local state, hydrated from server-loaded prefs. Numbers display as
-	// empty strings when null so the input shows the placeholder rather than "0".
-	$: units = (prefs?.units ?? 'imperial') as Units;
-	$: weekStart = (prefs?.weekStart ?? 'mon') as 'mon' | 'sun';
-	$: ftpInput = prefs?.ftpWatts != null ? String(prefs.ftpWatts) : '';
-	$: thrHrInput = prefs?.thresholdHrBpm != null ? String(prefs.thresholdHrBpm) : '';
-	$: maxHrInput = prefs?.maxHrBpm != null ? String(prefs.maxHrBpm) : '';
-	$: thrPaceInput = paceInputFromPrefs(prefs?.thresholdPaceSecPerKm ?? null, units);
+	// IMPORTANT: form inputs are bound to plain `let` values, not `$:` derived
+	// ones. With `$:` the reactive statement re-runs on every render and clobbers
+	// what the user is typing — bind:value writes to the variable, then the `$:`
+	// snapshot of server data overwrites it. Initialized once at script-eval
+	// time; the component re-instantiates on full navigation, and use:enhance
+	// post-save sees the already-correct values (the user just typed them).
+	let displayName = data.user.displayName ?? '';
+	let units: Units = (data.userPrefs?.units ?? 'imperial') as Units;
+	let weekStart: 'mon' | 'sun' = (data.userPrefs?.weekStart ?? 'mon') as 'mon' | 'sun';
+	let ftpInput = data.userPrefs?.ftpWatts != null ? String(data.userPrefs.ftpWatts) : '';
+	let thrHrInput = data.userPrefs?.thresholdHrBpm != null ? String(data.userPrefs.thresholdHrBpm) : '';
+	let maxHrInput = data.userPrefs?.maxHrBpm != null ? String(data.userPrefs.maxHrBpm) : '';
+	let thrPaceInput = paceInputFromPrefs(
+		data.userPrefs?.thresholdPaceSecPerKm ?? null,
+		units
+	);
 
 	function paceInputFromPrefs(secPerKm: number | null, u: Units): string {
 		if (secPerKm === null) return '';
