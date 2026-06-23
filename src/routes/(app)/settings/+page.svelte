@@ -7,6 +7,7 @@
 	export let form: ActionData;
 
 	$: user = data.user;
+	$: garmin = data.garmin;
 	$: initials = computeInitials(user.displayName ?? user.email);
 
 	let saving = false;
@@ -29,6 +30,32 @@
 		units
 	);
 
+	// Garmin integration UI state.
+	let showConnect = false;
+	let connecting = false;
+	let syncing = false;
+	let disconnecting = false;
+
+	// Garmin action results live on the shared `form` prop; read loosely to avoid
+	// union friction across the page's several actions.
+	$: gform = (form ?? {}) as Record<string, any>;
+	$: garminError = gform.garminError as string | undefined;
+	$: garminNotice = noticeFrom(gform);
+
+	function noticeFrom(f: Record<string, any>): string | null {
+		if (f.garminSync) {
+			const s = f.garminSync;
+			const bits = [`${s.imported} imported`];
+			if (s.duplicate) bits.push(`${s.duplicate} already had`);
+			if (s.unsupported) bits.push(`${s.unsupported} skipped`);
+			if (s.failed) bits.push(`${s.failed} failed`);
+			return bits.join(' · ');
+		}
+		if (f.garminConnected) return 'Connected to Garmin Connect.';
+		if (f.garminDisconnected) return 'Disconnected.';
+		return null;
+	}
+
 	function paceInputFromPrefs(secPerKm: number | null, u: Units): string {
 		if (secPerKm === null) return '';
 		const sec = paceFromSecPerKm(secPerKm, u);
@@ -37,19 +64,24 @@
 		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
 
+	function formatRelative(ms: number): string {
+		const diff = Date.now() - ms;
+		if (diff < 60_000) return 'just now';
+		const min = Math.floor(diff / 60_000);
+		if (min < 60) return `${min} min ago`;
+		const h = Math.floor(min / 60);
+		if (h < 24) return `${h} h ago`;
+		const d = Math.floor(h / 24);
+		if (d < 14) return `${d} d ago`;
+		return new Date(ms).toLocaleDateString();
+	}
+
 	const SUB_NAV = [
 		{ href: '#profile', label: 'Profile' },
 		{ href: '#thresholds', label: 'Training thresholds' },
 		{ href: '#display', label: 'Units & display' },
 		{ href: '#integrations', label: 'Integrations' },
 		{ href: '#account', label: 'Account' }
-	];
-
-	type Integration = { key: string; name: string; mark: string; color: string };
-	const INTEGRATIONS: Integration[] = [
-		{ key: 'garmin', name: 'Garmin Connect', mark: 'G', color: '#0a7ac2' },
-		{ key: 'strava', name: 'Strava', mark: 'S', color: '#e2602a' },
-		{ key: 'wahoo', name: 'Wahoo SYSTM', mark: 'W', color: '#1c5d3a' }
 	];
 
 	function signOut() {
@@ -80,189 +112,304 @@
 			{/each}
 		</aside>
 
-		<form
-			method="POST"
-			action="?/save"
-			class="content"
-			use:enhance={() => {
-				saving = true;
-				saved = false;
-				return async ({ result, update }) => {
-					saving = false;
-					if (result.type === 'success') saved = true;
-					await update({ reset: false });
-				};
-			}}
-		>
-			<section id="profile" class="card">
-				<div class="card-title">Profile</div>
-				<div class="card-eyebrow oi-mono">How you appear across OpenIbex</div>
+		<div class="content">
+			<form
+				method="POST"
+				action="?/save"
+				class="save-form"
+				use:enhance={() => {
+					saving = true;
+					saved = false;
+					return async ({ result, update }) => {
+						saving = false;
+						if (result.type === 'success') saved = true;
+						await update({ reset: false });
+					};
+				}}
+			>
+				<section id="profile" class="card">
+					<div class="card-title">Profile</div>
+					<div class="card-eyebrow oi-mono">How you appear across OpenIbex</div>
 
-				<div class="avatar-row">
-					<div class="avatar oi-mono">{initials}</div>
-					<button type="button" class="btn-soft" disabled title="Coming soon">Change photo</button>
-				</div>
-
-				<div class="field-grid two-col">
-					<label class="field">
-						<span class="field-label oi-mono">Full name</span>
-						<input class="oi-input" type="text" name="displayName" bind:value={displayName} maxlength="120" />
-					</label>
-					<label class="field">
-						<span class="field-label oi-mono">Email</span>
-						<input class="oi-input" type="email" value={user.email} readonly />
-					</label>
-					<label class="field">
-						<span class="field-label oi-mono">Team <span class="soon">soon</span></span>
-						<input class="oi-input" type="text" placeholder="—" disabled />
-					</label>
-					<label class="field">
-						<span class="field-label oi-mono">Primary discipline <span class="soon">soon</span></span>
-						<input class="oi-input" type="text" placeholder="—" disabled />
-					</label>
-				</div>
-			</section>
-
-			<section id="thresholds" class="card">
-				<div class="card-title">Training thresholds</div>
-				<div class="card-eyebrow oi-mono">
-					Used to compute TSS and IF. Bike TSS uses normalized power vs FTP;
-					run TSS uses average HR vs threshold HR. Leave blank to fall back to
-					app defaults (FTP 240 W, threshold HR 160 bpm).
-				</div>
-
-				<div class="field-grid four-col">
-					<label class="field">
-						<span class="field-label oi-mono">FTP (W)</span>
-						<input
-							class="oi-input oi-mono"
-							type="text"
-							inputmode="numeric"
-							name="ftpWatts"
-							placeholder="240"
-							bind:value={ftpInput}
-						/>
-					</label>
-					<label class="field">
-						<span class="field-label oi-mono">Thr. HR (bpm)</span>
-						<input
-							class="oi-input oi-mono"
-							type="text"
-							inputmode="numeric"
-							name="thresholdHrBpm"
-							placeholder="160"
-							bind:value={thrHrInput}
-						/>
-					</label>
-					<label class="field">
-						<span class="field-label oi-mono">Thr. pace {paceUnit(units)}</span>
-						<input
-							class="oi-input oi-mono"
-							type="text"
-							name="thresholdPace"
-							placeholder={units === 'imperial' ? '6:30' : '4:00'}
-							bind:value={thrPaceInput}
-						/>
-					</label>
-					<label class="field">
-						<span class="field-label oi-mono">Max HR (bpm)</span>
-						<input
-							class="oi-input oi-mono"
-							type="text"
-							inputmode="numeric"
-							name="maxHrBpm"
-							placeholder="190"
-							bind:value={maxHrInput}
-						/>
-					</label>
-				</div>
-			</section>
-
-			<section id="display" class="card">
-				<div class="card-title">Units &amp; display</div>
-				<div class="card-eyebrow oi-mono">
-					Applied across distance, elevation, and pace displays throughout the app.
-				</div>
-
-				<div class="display-row">
-					<div>
-						<div class="row-title">Measurement units</div>
-						<div class="row-help oi-mono">Distance, elevation, pace</div>
+					<div class="avatar-row">
+						<div class="avatar oi-mono">{initials}</div>
+						<button type="button" class="btn-soft" disabled title="Coming soon">Change photo</button>
 					</div>
-					<div class="seg-toggle">
-						<button
-							type="button"
-							class="seg-btn"
-							class:active={units === 'metric'}
-							on:click={() => (units = 'metric')}
-							aria-pressed={units === 'metric'}
-						>
-							Metric
-						</button>
-						<button
-							type="button"
-							class="seg-btn"
-							class:active={units === 'imperial'}
-							on:click={() => (units = 'imperial')}
-							aria-pressed={units === 'imperial'}
-						>
-							Imperial
-						</button>
-					</div>
-				</div>
 
-				<div class="display-divider"></div>
-
-				<div class="display-row">
-					<div>
-						<div class="row-title">Week starts on</div>
-						<div class="row-help oi-mono">Calendar &amp; weekly totals</div>
+					<div class="field-grid two-col">
+						<label class="field">
+							<span class="field-label oi-mono">Full name</span>
+							<input class="oi-input" type="text" name="displayName" bind:value={displayName} maxlength="120" />
+						</label>
+						<label class="field">
+							<span class="field-label oi-mono">Email</span>
+							<input class="oi-input" type="email" value={user.email} readonly />
+						</label>
+						<label class="field">
+							<span class="field-label oi-mono">Team <span class="soon">soon</span></span>
+							<input class="oi-input" type="text" placeholder="—" disabled />
+						</label>
+						<label class="field">
+							<span class="field-label oi-mono">Primary discipline <span class="soon">soon</span></span>
+							<input class="oi-input" type="text" placeholder="—" disabled />
+						</label>
 					</div>
-					<div class="seg-toggle">
-						<button
-							type="button"
-							class="seg-btn"
-							class:active={weekStart === 'mon'}
-							on:click={() => (weekStart = 'mon')}
-							aria-pressed={weekStart === 'mon'}
-						>
-							Monday
-						</button>
-						<button
-							type="button"
-							class="seg-btn"
-							class:active={weekStart === 'sun'}
-							on:click={() => (weekStart = 'sun')}
-							aria-pressed={weekStart === 'sun'}
-						>
-							Sunday
-						</button>
-					</div>
-				</div>
+				</section>
 
-				<input type="hidden" name="units" value={units} />
-				<input type="hidden" name="weekStart" value={weekStart} />
-			</section>
+				<section id="thresholds" class="card">
+					<div class="card-title">Training thresholds</div>
+					<div class="card-eyebrow oi-mono">
+						Used to compute TSS and IF. Bike TSS uses normalized power vs FTP;
+						run TSS uses average HR vs threshold HR. Leave blank to fall back to
+						app defaults (FTP 240 W, threshold HR 160 bpm).
+					</div>
+
+					<div class="field-grid four-col">
+						<label class="field">
+							<span class="field-label oi-mono">FTP (W)</span>
+							<input
+								class="oi-input oi-mono"
+								type="text"
+								inputmode="numeric"
+								name="ftpWatts"
+								placeholder="240"
+								bind:value={ftpInput}
+							/>
+						</label>
+						<label class="field">
+							<span class="field-label oi-mono">Thr. HR (bpm)</span>
+							<input
+								class="oi-input oi-mono"
+								type="text"
+								inputmode="numeric"
+								name="thresholdHrBpm"
+								placeholder="160"
+								bind:value={thrHrInput}
+							/>
+						</label>
+						<label class="field">
+							<span class="field-label oi-mono">Thr. pace {paceUnit(units)}</span>
+							<input
+								class="oi-input oi-mono"
+								type="text"
+								name="thresholdPace"
+								placeholder={units === 'imperial' ? '6:30' : '4:00'}
+								bind:value={thrPaceInput}
+							/>
+						</label>
+						<label class="field">
+							<span class="field-label oi-mono">Max HR (bpm)</span>
+							<input
+								class="oi-input oi-mono"
+								type="text"
+								inputmode="numeric"
+								name="maxHrBpm"
+								placeholder="190"
+								bind:value={maxHrInput}
+							/>
+						</label>
+					</div>
+				</section>
+
+				<section id="display" class="card">
+					<div class="card-title">Units &amp; display</div>
+					<div class="card-eyebrow oi-mono">
+						Applied across distance, elevation, and pace displays throughout the app.
+					</div>
+
+					<div class="display-row">
+						<div>
+							<div class="row-title">Measurement units</div>
+							<div class="row-help oi-mono">Distance, elevation, pace</div>
+						</div>
+						<div class="seg-toggle">
+							<button
+								type="button"
+								class="seg-btn"
+								class:active={units === 'metric'}
+								on:click={() => (units = 'metric')}
+								aria-pressed={units === 'metric'}
+							>
+								Metric
+							</button>
+							<button
+								type="button"
+								class="seg-btn"
+								class:active={units === 'imperial'}
+								on:click={() => (units = 'imperial')}
+								aria-pressed={units === 'imperial'}
+							>
+								Imperial
+							</button>
+						</div>
+					</div>
+
+					<div class="display-divider"></div>
+
+					<div class="display-row">
+						<div>
+							<div class="row-title">Week starts on</div>
+							<div class="row-help oi-mono">Calendar &amp; weekly totals</div>
+						</div>
+						<div class="seg-toggle">
+							<button
+								type="button"
+								class="seg-btn"
+								class:active={weekStart === 'mon'}
+								on:click={() => (weekStart = 'mon')}
+								aria-pressed={weekStart === 'mon'}
+							>
+								Monday
+							</button>
+							<button
+								type="button"
+								class="seg-btn"
+								class:active={weekStart === 'sun'}
+								on:click={() => (weekStart = 'sun')}
+								aria-pressed={weekStart === 'sun'}
+							>
+								Sunday
+							</button>
+						</div>
+					</div>
+
+					<input type="hidden" name="units" value={units} />
+					<input type="hidden" name="weekStart" value={weekStart} />
+				</section>
+
+				{#if form?.error}
+					<div class="form-error">{form.error}</div>
+				{/if}
+
+				<footer class="form-foot">
+					<span class="save-status oi-mono">
+						{#if saving}Saving…{:else if saved}Saved.{/if}
+					</span>
+					<a class="btn" href="/dashboard">Cancel</a>
+					<button type="submit" class="btn btn-primary" disabled={saving}>Save changes</button>
+				</footer>
+			</form>
 
 			<section id="integrations" class="card">
 				<div class="card-title">
-					Integrations <span class="soon-pill">Not planned</span>
+					Integrations <span class="soon-pill">Experimental</span>
 				</div>
 				<div class="card-eyebrow oi-mono">
-					OpenIbex intentionally avoids third-party API integrations. Upload FIT files manually via the Activities page or use the Garmin export bulk-import CLI.
+					Automatic Garmin Connect sync pulls new activities each time you open OpenIbex.
+					Only encrypted session tokens are stored — never your password. Uses an
+					unofficial Garmin API; see the README for caveats.
 				</div>
 
 				<div class="integration-list">
-					{#each INTEGRATIONS as g}
-						<div class="integration-row">
-							<div class="integration-mark oi-mono" style="background: {g.color}">{g.mark}</div>
-							<div class="integration-meta">
-								<div class="row-title">{g.name}</div>
+					<div class="integration-row">
+						<div class="integration-mark oi-mono" style="background: #0a7ac2">G</div>
+						<div class="integration-meta">
+							<div class="row-title">Garmin Connect</div>
+							{#if garmin.connected}
+								<div
+									class="row-help oi-mono"
+									class:warn={garmin.lastSyncStatus === 'auth_failed' || garmin.lastSyncStatus === 'error'}
+								>
+									{#if garmin.lastSyncStatus === 'auth_failed'}
+										Reconnect needed — session expired
+									{:else if garmin.lastSyncStatus === 'error'}
+										Last sync failed{garmin.lastSyncError ? ` — ${garmin.lastSyncError}` : ' — try again'}
+									{:else if garmin.lastSyncAt}
+										Last synced {formatRelative(garmin.lastSyncAt)}
+									{:else}
+										Connected · not synced yet
+									{/if}
+								</div>
+							{:else}
 								<div class="row-help oi-mono">Not connected</div>
-							</div>
-							<button type="button" class="btn-soft" disabled>Connect</button>
+							{/if}
 						</div>
-					{/each}
+
+						{#if garmin.connected}
+							<div class="integration-actions">
+								<form
+									method="POST"
+									action="?/syncNow"
+									use:enhance={() => {
+										syncing = true;
+										return async ({ update }) => {
+											syncing = false;
+											await update({ reset: false });
+										};
+									}}
+								>
+									<button class="btn-soft" disabled={syncing}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+								</form>
+								<form
+									method="POST"
+									action="?/disconnectGarmin"
+									use:enhance={() => {
+										disconnecting = true;
+										return async ({ update }) => {
+											disconnecting = false;
+											await update({ reset: false });
+										};
+									}}
+								>
+									<button class="btn-soft danger" disabled={disconnecting}>Disconnect</button>
+								</form>
+							</div>
+						{:else}
+							<button type="button" class="btn-soft" on:click={() => (showConnect = !showConnect)}>
+								Connect
+							</button>
+						{/if}
+					</div>
+
+					{#if !garmin.connected && showConnect}
+						<form
+							class="garmin-connect"
+							method="POST"
+							action="?/connectGarmin"
+							use:enhance={() => {
+								connecting = true;
+								return async ({ result, update }) => {
+									connecting = false;
+									if (result.type === 'success') showConnect = false;
+									await update({ reset: false });
+								};
+							}}
+						>
+							<div class="field-grid two-col">
+								<label class="field">
+									<span class="field-label oi-mono">Garmin email</span>
+									<input class="oi-input" type="email" name="garminEmail" autocomplete="username" />
+								</label>
+								<label class="field">
+									<span class="field-label oi-mono">Password</span>
+									<input class="oi-input" type="password" name="garminPassword" autocomplete="current-password" />
+								</label>
+							</div>
+							<div class="garmin-foot">
+								<span class="row-help oi-mono">Two-factor (2FA) accounts aren't supported yet.</span>
+								<button class="btn btn-primary" disabled={connecting}>
+									{connecting ? 'Connecting…' : 'Connect'}
+								</button>
+							</div>
+						</form>
+					{/if}
+
+					{#if garminError}
+						<div class="form-error">{garminError}</div>
+					{:else if garminNotice}
+						<div class="form-notice">{garminNotice}</div>
+					{/if}
+
+					<div class="integration-row">
+						<div class="integration-mark oi-mono" style="background: #e2602a">S</div>
+						<div class="integration-meta">
+							<div class="row-title">Strava</div>
+							<div class="row-help oi-mono">
+								Requires a paid Strava subscription under their June 2026 API rules — not planned.
+							</div>
+						</div>
+						<button type="button" class="btn-soft" disabled>Connect</button>
+					</div>
 				</div>
 			</section>
 
@@ -294,19 +441,7 @@
 					</button>
 				</div>
 			</section>
-
-			{#if form?.error}
-				<div class="form-error">{form.error}</div>
-			{/if}
-
-			<footer class="form-foot">
-				<span class="save-status oi-mono">
-					{#if saving}Saving…{:else if saved}Saved.{/if}
-				</span>
-				<a class="btn" href="/dashboard">Cancel</a>
-				<button type="submit" class="btn btn-primary" disabled={saving}>Save changes</button>
-			</footer>
-		</form>
+		</div>
 	</div>
 </section>
 
@@ -368,7 +503,8 @@
 		background: var(--bg-emphasis);
 	}
 
-	.content {
+	.content,
+	.save-form {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
@@ -446,6 +582,9 @@
 		opacity: 0.55;
 		cursor: not-allowed;
 	}
+	.btn-soft.danger {
+		color: var(--danger);
+	}
 
 	.field-grid {
 		display: grid;
@@ -513,6 +652,9 @@
 		color: var(--faint);
 		margin-top: 3px;
 	}
+	.row-help.warn {
+		color: var(--danger);
+	}
 	.display-divider {
 		height: 1px;
 		background: var(--line);
@@ -570,6 +712,29 @@
 		flex: 1;
 		min-width: 0;
 	}
+	.integration-actions {
+		display: flex;
+		gap: 8px;
+	}
+	.integration-actions form,
+	.integration-row form {
+		margin: 0;
+	}
+
+	.garmin-connect {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 14px 0 4px;
+		border-top: 1px solid var(--line);
+		margin: 0;
+	}
+	.garmin-foot {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+	}
 
 	.btn {
 		font: 600 12px 'Archivo', system-ui, sans-serif;
@@ -602,6 +767,13 @@
 		font-size: 11px;
 		color: var(--danger);
 		background: var(--danger-bg);
+		border-radius: 6px;
+		padding: 9px 12px;
+	}
+	.form-notice {
+		font-size: 11px;
+		color: var(--green);
+		background: var(--bg-emphasis);
 		border-radius: 6px;
 		padding: 9px 12px;
 	}

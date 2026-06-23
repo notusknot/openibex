@@ -1,3 +1,9 @@
+// Load .env into process.env once, here at the env gate. In the Nix devshell
+// and in docker (`env_file`) the core vars are already exported, so dotenv does
+// NOT override them — it only fills in vars that live solely in .env (e.g.
+// SYNC_ENCRYPTION_KEY). Missing .env file is a silent no-op (fine in the
+// container, which doesn't ship one). Mirrors drizzle.config.ts.
+import 'dotenv/config';
 import path from 'node:path';
 
 export type OpenIbexEnv = {
@@ -12,6 +18,14 @@ export type OpenIbexEnv = {
 	OPEN_REGISTRATION: boolean;
 	SESSION_SECRET?: string;
 	SESSION_TTL_DAYS: number;
+	// Canonical external origin (also used by adapter-node's CSRF check). Its
+	// protocol decides whether session cookies are marked Secure.
+	ORIGIN?: string;
+	// Experimental Garmin sync: base64-encoded 32-byte key used to encrypt
+	// stored provider session tokens (AES-256-GCM). Optional unless a sync
+	// credential exists; src/lib/server/sync/crypto.ts throws a clear error
+	// if it's needed but missing/malformed.
+	SYNC_ENCRYPTION_KEY?: string;
 };
 
 function readEnv(name: string): string | undefined {
@@ -43,6 +57,8 @@ export function getEnv(): OpenIbexEnv {
 		NODE_ENV: readEnv('NODE_ENV') ?? 'development',
 		OPEN_REGISTRATION: openRegistration,
 		SESSION_SECRET: readEnv('SESSION_SECRET'),
-		SESSION_TTL_DAYS: sessionTtlDays
+		SESSION_TTL_DAYS: sessionTtlDays,
+		ORIGIN: readEnv('ORIGIN'),
+		SYNC_ENCRYPTION_KEY: readEnv('SYNC_ENCRYPTION_KEY')
 	};
 }

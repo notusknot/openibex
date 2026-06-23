@@ -336,3 +336,34 @@ export const appSettings = sqliteTable('app_settings', {
 	value: text('value').notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull()
 });
+
+export const garminSyncStatuses = ['ok', 'auth_failed', 'error'] as const;
+export type GarminSyncStatus = (typeof garminSyncStatuses)[number];
+
+// Experimental: stored Garmin Connect session tokens for automatic sync.
+// `encryptedBlob` is AES-256-GCM ciphertext of the provider's serializable
+// session tokens (never the plaintext password — that is held only in memory
+// during login). One row per user. See src/lib/server/sync/.
+export const garminCredentials = sqliteTable(
+	'garmin_credentials',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		encryptedBlob: text('encrypted_blob').notNull(),
+		lastSyncAt: integer('last_sync_at', { mode: 'timestamp_ms' }),
+		lastSyncStatus: text('last_sync_status', { enum: garminSyncStatuses }),
+		lastSyncError: text('last_sync_error'),
+		syncEnabled: integer('sync_enabled', { mode: 'boolean' }).notNull().default(true),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(t) => ({
+		userUnique: uniqueIndex('garmin_credentials_user_unique').on(t.userId)
+	})
+);

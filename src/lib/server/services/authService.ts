@@ -8,6 +8,15 @@ import type { Units, UserRole, WeekStart } from '$lib/server/db/schema';
 
 export const SESSION_COOKIE_NAME = 'openibex_session';
 
+// Mark the session cookie Secure only when the app is actually reachable over
+// HTTPS, inferred from the configured ORIGIN. A browser drops a Secure cookie
+// sent over plain HTTP, so keying this off NODE_ENV alone breaks HTTP-only
+// deployments (e.g. a Tailscale/LAN IP). Behind a TLS reverse proxy, set
+// ORIGIN=https://… and cookies stay Secure.
+export function sessionCookieSecure(): boolean {
+	return (getEnv().ORIGIN ?? '').startsWith('https://');
+}
+
 export type AuthUser = {
 	id: string;
 	email: string;

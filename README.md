@@ -194,6 +194,33 @@ The import is safe to run multiple times against the same export directory:
 
 Before a large bulk import, it’s still recommended to back up `./data` (bind-mounted to `/data` in Docker).
 
+## Garmin Connect sync (experimental)
+
+> ⚠️ **Experimental, and a deliberate departure from the "no external integrations" rule.** This feature talks to Garmin Connect through an **unofficial** library ([`garmin-connect`](https://www.npmjs.com/package/garmin-connect)) by logging in as you. Read the caveats before enabling it.
+
+Once connected, OpenIbex pulls your new activities automatically. There is **no background worker** — sync runs fire-and-forget when you open the app (throttled to once every ~15 minutes per user), plus a manual **Sync now** button. If you never open the app, nothing syncs; for full history, use the bulk importer above.
+
+### Setup
+
+1. Generate an encryption key and add it to your environment:
+   ```bash
+   openssl rand -base64 32        # put the result in SYNC_ENCRYPTION_KEY
+   ```
+   This key encrypts the stored Garmin session tokens (AES-256-GCM). Only the encrypted blob is persisted — your password is used once at login and never stored.
+2. Restart the app, then go to **Settings → Integrations → Garmin Connect → Connect** and enter your Garmin email + password.
+3. Click **Sync now**, or just navigate the app — new activities import as `source = 'garmin-sync'` and show up on the dashboard/activities list. Re-running is safe: activities are de-duplicated by Garmin activity id, FIT SHA-256, and a sport/start/duration/distance fingerprint.
+
+### Caveats (please read)
+
+- **Unofficial API / breakage.** Garmin can change their login at any time and break the library. When that happens you'll see `auth_failed` in Settings → Integrations within one sync cycle; pin/upgrade the `garmin-connect` version to recover.
+- **Terms of service.** Automated access is against Garmin's TOS. The practical risk to a single personal account is low, but you're opting into it knowingly.
+- **Two-factor auth is NOT supported.** The current library can't complete a 2FA/MFA challenge. If your Garmin account has 2FA enabled, connecting will fail with a clear message. (A future swap to Python [`garth`](https://github.com/matin/garth) would add MFA support.)
+- **Captcha.** Garmin sometimes shows a captcha on unusual logins, which can't be solved programmatically. Log in once on the Garmin website, then retry.
+- **Activity titles.** Garmin's real activity names live behind a separate endpoint; synced activities use the time-of-day fallback title (e.g. "Morning Run").
+- **Encryption key loss.** If `SYNC_ENCRYPTION_KEY` is lost or rotated, stored tokens become unreadable and you must reconnect.
+
+To stop syncing, click **Disconnect** in Settings (this deletes the stored credential). The `garmin_credentials` table is additive — removing the feature leaves no trace in your other data.
+
 ## Health endpoint
 
 Public endpoint:

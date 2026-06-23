@@ -1,8 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 
-import { getEnv } from '$lib/server/env';
-import { loginWithEmailPassword, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
+import { loginWithEmailPassword, SESSION_COOKIE_NAME, sessionCookieSecure } from '$lib/server/services/authService';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.user) {
@@ -23,12 +22,11 @@ export const actions: Actions = {
 
 		try {
 			const { session } = await loginWithEmailPassword({ email, password });
-			const env = getEnv();
 			cookies.set(SESSION_COOKIE_NAME, session.token, {
 				path: '/',
 				httpOnly: true,
 				sameSite: 'lax',
-				secure: env.NODE_ENV === 'production',
+				secure: sessionCookieSecure(),
 				expires: session.expiresAt
 			});
 		} catch (err) {
