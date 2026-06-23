@@ -2,6 +2,10 @@ import {
 	listActivitiesForUserInTimeRange,
 	type DbActivity
 } from '$lib/server/repositories/activitiesRepository';
+import {
+	getActivitiesList,
+	type ActivityListRow
+} from '$lib/server/services/activitiesListService';
 import { fallbackLoadScore } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
 
@@ -50,6 +54,7 @@ export type DashboardData = {
 	sport: { swimPct: number; bikePct: number; runPct: number };
 	zones: DashboardZone[];
 	power: DashboardPower[];
+	recent: ActivityListRow[];
 	hasData: boolean;
 };
 
@@ -88,11 +93,14 @@ export async function getDashboardData(
 	const todayEnd = new Date(todayStart.getTime() + DAY_MS - 1);
 	const windowStart = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
 
-	const windowActivities = await listActivitiesForUserInTimeRange({
-		userId,
-		from: windowStart,
-		to: todayEnd
-	});
+	const [windowActivities, recentList] = await Promise.all([
+		listActivitiesForUserInTimeRange({
+			userId,
+			from: windowStart,
+			to: todayEnd
+		}),
+		getActivitiesList({ userId, limit: 10 })
+	]);
 
 	const dailyTss = new Array<number>(days).fill(0);
 	const dailyBySport: Record<'swim' | 'bike' | 'run' | 'other', number[]> = {
@@ -219,6 +227,7 @@ export async function getDashboardData(
 		sport,
 		zones,
 		power,
+		recent: recentList.rows,
 		hasData: windowActivities.length > 0
 	};
 }

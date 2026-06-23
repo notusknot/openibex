@@ -534,6 +534,37 @@
 			</div>
 		</div>
 	</div>
+
+	{#if dashboard.recent.length > 0}
+		<div class="card recent-card">
+			<div class="recent-head">
+				<div class="card-title">Recent activities</div>
+				<a class="recent-view-all" href="/activities">View all →</a>
+			</div>
+			<div class="recent-table">
+				<div class="recent-thead">
+					<span class="recent-th oi-mono">Date</span>
+					<span class="recent-th oi-mono">Sport</span>
+					<span class="recent-th oi-mono">Title</span>
+					<span class="recent-th oi-mono right">Dist</span>
+					<span class="recent-th oi-mono right">Time</span>
+					<span class="recent-th oi-mono right">TSS</span>
+				</div>
+				{#each dashboard.recent as r}
+					<a class="recent-row" href="/activities/{r.id}" title={r.title}>
+						<span class="recent-cell oi-mono recent-date">{r.date}</span>
+						<span class="recent-cell">
+							<span class="recent-tag oi-mono" style="background: {r.color}">{r.tag}</span>
+						</span>
+						<span class="recent-cell recent-title">{r.title}</span>
+						<span class="recent-cell oi-mono right">{r.distanceLabel} km</span>
+						<span class="recent-cell oi-mono right">{r.durationLabel}</span>
+						<span class="recent-cell oi-mono right recent-tss">{r.tss}</span>
+					</a>
+				{/each}
+			</div>
+		</div>
+	{/if}
 </section>
 
 <style>
@@ -1025,5 +1056,94 @@
 		color: var(--ink);
 		width: 36px;
 		text-align: right;
+	}
+
+	.recent-card {
+		padding: 13px 16px 4px;
+	}
+	.recent-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 10px;
+	}
+	.recent-view-all {
+		font: 600 11px 'Archivo', system-ui, sans-serif;
+		color: var(--green);
+		text-decoration: none;
+	}
+	.recent-view-all:hover {
+		text-decoration: underline;
+	}
+	.recent-table {
+		display: flex;
+		flex-direction: column;
+	}
+	.recent-thead,
+	.recent-row {
+		display: grid;
+		grid-template-columns: 90px 56px minmax(0, 1fr) 72px 60px 52px;
+		align-items: center;
+		gap: 0;
+	}
+	.recent-thead {
+		padding: 0 4px 7px;
+		border-bottom: 1px solid var(--line);
+	}
+	.recent-th {
+		font-size: 8.5px;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		text-transform: uppercase;
+		font-weight: 600;
+	}
+	.recent-th.right {
+		text-align: right;
+	}
+	.recent-row {
+		padding: 0 4px;
+		border-bottom: 1px solid var(--line);
+		text-decoration: none;
+		transition: background 120ms ease;
+	}
+	.recent-row:last-of-type {
+		border-bottom: none;
+	}
+	.recent-row:hover {
+		background: var(--bg-soft);
+	}
+	.recent-cell {
+		padding: 9px 0;
+		font-size: 11px;
+		color: var(--ink-soft);
+	}
+	.recent-cell.right {
+		text-align: right;
+	}
+	.recent-date {
+		font-size: 10.5px;
+		color: var(--ink-soft);
+	}
+	.recent-tag {
+		font-size: 8.5px;
+		font-weight: 600;
+		color: #fff;
+		border-radius: 3px;
+		padding: 2px 6px;
+	}
+	.recent-title {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink);
+		padding-right: 8px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
+	}
+	.recent-tss {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink2);
 	}
 </style>

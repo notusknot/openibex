@@ -187,7 +187,10 @@
 
 	.oi-root {
 		display: flex;
-		min-height: 100vh;
+		/* Exactly viewport-sized (not min-height) so .oi-main is the only
+		   scroller — otherwise content taller than the viewport triggers a
+		   body-level scroll that takes the rail with it. */
+		height: 100vh;
 		background: var(--bg);
 		color: var(--ink);
 	}
@@ -357,6 +360,8 @@
 	.oi-main {
 		flex: 1;
 		overflow: auto;
+		/* Prevents scroll-chaining bounce from leaking out to the body. */
+		overscroll-behavior: contain;
 		min-width: 0;
 		padding: 20px 24px 28px;
 	}
