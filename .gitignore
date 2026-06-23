@@ -19,3 +19,8 @@ data/*.db-shm
 
 # Claude Design handoff archives — kept locally, not tracked.
 *-handoff.zip
+
+# Python bytecode (the ui-ux-pro-max skill bundles .py scripts whose Python
+# runtime drops .pyc files alongside them).
+__pycache__/
+*.pyc
