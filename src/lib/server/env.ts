@@ -68,3 +68,41 @@ export function getEnv(): OpenIbexEnv {
 		LOG_LEVEL: logLevel
 	};
 }
+
+/**
+ * Fail-fast configuration check, run once at server boot (from hooks.server.ts)
+ * so missing/invalid required config crashes the process immediately with a
+ * clear message — instead of surfacing lazily on the first request that needs
+ * it (a session op, a sync, a cookie). Exported + pure-ish for unit testing.
+ */
+export function validateConfigOrThrow(): void {
+	const env = getEnv(); // also validates SESSION_TTL_DAYS + LOG_LEVEL
+	const isProd = env.NODE_ENV === 'production' || env.OPENIBEX_ENV === 'production';
+	const problems: string[] = [];
+
+	if (isProd && (!env.SESSION_SECRET || env.SESSION_SECRET.length < 16)) {
+		problems.push('SESSION_SECRET must be set to at least 16 characters in production.');
+	}
+	if (isProd && !env.ORIGIN) {
+		problems.push('ORIGIN must be set in production (used for the CSRF origin check and Secure cookies).');
+	}
+	// Optional, but if present it must be a valid 32-byte key — a malformed one
+	// would otherwise only blow up the first time a user connects/syncs Garmin.
+	if (env.SYNC_ENCRYPTION_KEY !== undefined) {
+		let bytes = -1;
+		try {
+			bytes = Buffer.from(env.SYNC_ENCRYPTION_KEY, 'base64').length;
+		} catch {
+			bytes = -1;
+		}
+		if (bytes !== 32) {
+			problems.push(
+				'SYNC_ENCRYPTION_KEY must be base64 that decodes to exactly 32 bytes (generate: openssl rand -base64 32).'
+			);
+		}
+	}
+
+	if (problems.length > 0) {
+		throw new Error(`Invalid OpenIbex configuration:\n  - ${problems.join('\n  - ')}`);
+	}
+}

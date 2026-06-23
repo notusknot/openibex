@@ -2,9 +2,15 @@ import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
 import { registerShutdownHandlers } from '$lib/server/shutdown';
+import { validateConfigOrThrow } from '$lib/server/env';
 
-// Runs once when the server module loads: drain in-flight writes + checkpoint
-// the WAL + close the DB cleanly on SIGTERM/SIGINT (Docker deploy/restart).
+// Runs once when the server module loads. Fail fast on missing/invalid config,
+// then install handlers that drain in-flight writes + checkpoint the WAL + close
+// the DB cleanly on SIGTERM/SIGINT (Docker deploy/restart). Skipped under vitest
+// (the test runner imports this module before any per-test env is set up).
+if (!process.env.VITEST) {
+	validateConfigOrThrow();
+}
 registerShutdownHandlers();
 
 const PUBLIC_PREFIXES = [
