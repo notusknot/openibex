@@ -1,5 +1,7 @@
 # OpenIbex
 
+[![CI](https://github.com/notusknot/openibex/actions/workflows/ci.yml/badge.svg)](https://github.com/notusknot/openibex/actions/workflows/ci.yml)
+
 A self-hosted training platform for endurance athletes. 
 
 ![OpenIbex Dashboard](docs/dashboard.png)

@@ -14,6 +14,10 @@ capability and the patch version for fixes; breaking changes may land in a minor
 
 ## [Unreleased]
 
+### Added
+- **Continuous integration** (GitHub Actions) — typecheck (`pnpm check`), test, and build; a
+  changelog-touched gate on PRs; and a `docker compose` health smoke test against `/api/health`.
+
 ## [0.2.0] - 2026-06-24
 
 Live (experimental) Garmin Connect sync, a broad production-hardening pass, a full UI redesign, and the activities filtering workflow.
