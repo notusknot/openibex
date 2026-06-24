@@ -32,7 +32,7 @@
 		Bike: 'var(--bike)',
 		Run: 'var(--run)',
 		Swim: 'var(--swim)',
-		Strength: 'var(--c-fat)',
+		Strength: 'var(--muted)',
 		Other: 'var(--muted)'
 	};
 

@@ -1,11 +1,24 @@
 <script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
+	import SummaryCard from '$lib/components/ui/SummaryCard.svelte';
 
 	export let data: PageData;
 	export let form: ActionData;
 
 	$: calendar = data.calendar;
+	$: summaryCards = [
+		{ label: 'Completed', value: calendar.summary.completed, sub: 'sessions this month', accent: 'var(--run)' },
+		{ label: 'Planned', value: calendar.summary.planned, sub: 'upcoming workouts', accent: 'var(--c-fat)' },
+		{ label: 'Monthly TSS', value: calendar.summary.tss, sub: 'completed load', accent: 'var(--green)' },
+		{
+			label: 'Volume',
+			value: calendar.summary.hours,
+			unit: 'h',
+			sub: `across ${calendar.summary.weekCount} weeks`,
+			accent: 'var(--c-form)'
+		}
+	];
 
 	type FilterKey = 'all' | 'swim' | 'bike' | 'run';
 	type ModalSport = 'Swim' | 'Bike' | 'Run';
@@ -79,28 +92,9 @@
 	</header>
 
 	<div class="summary-strip">
-		<div class="summary-card sum-completed">
-			<div class="sum-label oi-mono">Completed</div>
-			<div class="sum-val oi-mono">{calendar.summary.completed}</div>
-			<div class="sum-sub oi-mono">sessions this month</div>
-		</div>
-		<div class="summary-card sum-planned">
-			<div class="sum-label oi-mono">Planned</div>
-			<div class="sum-val oi-mono">{calendar.summary.planned}</div>
-			<div class="sum-sub oi-mono">upcoming workouts</div>
-		</div>
-		<div class="summary-card sum-tss">
-			<div class="sum-label oi-mono">Monthly TSS</div>
-			<div class="sum-val oi-mono">{calendar.summary.tss}</div>
-			<div class="sum-sub oi-mono">completed load</div>
-		</div>
-		<div class="summary-card sum-volume">
-			<div class="sum-label oi-mono">Volume</div>
-			<div class="sum-val oi-mono">
-				{calendar.summary.hours}<span class="sum-unit">h</span>
-			</div>
-			<div class="sum-sub oi-mono">across {calendar.summary.weekCount} weeks</div>
-		</div>
+		{#each summaryCards as c}
+			<SummaryCard {...c} />
+		{/each}
 	</div>
 
 	<div class="filter-row">
@@ -376,48 +370,6 @@
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
 		gap: 10px;
-	}
-	.summary-card {
-		background: var(--card);
-		border: 1px solid var(--line);
-		border-top: 2px solid var(--run);
-		border-radius: 8px;
-		padding: 12px 14px;
-	}
-	.sum-completed {
-		border-top-color: var(--run);
-	}
-	.sum-planned {
-		border-top-color: var(--c-fat);
-	}
-	.sum-tss {
-		border-top-color: var(--green);
-	}
-	.sum-volume {
-		border-top-color: var(--c-form);
-	}
-	.sum-label {
-		font-size: 8.5px;
-		letter-spacing: 0.08em;
-		color: var(--faint);
-		text-transform: uppercase;
-	}
-	.sum-val {
-		font-size: 24px;
-		font-weight: 600;
-		color: var(--ink);
-		margin-top: 6px;
-		line-height: 1;
-	}
-	.sum-unit {
-		font-size: 13px;
-		color: var(--faint);
-		margin-left: 2px;
-	}
-	.sum-sub {
-		font-size: 9.5px;
-		color: var(--muted);
-		margin-top: 5px;
 	}
 
 	.filter-row {

@@ -10,25 +10,11 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_DISPLAY } from '$lib/server/sport';
+import { SPORT_COLOR_VAR, SPORT_DISPLAY, SPORT_TAG } from '$lib/server/sport';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 import { distanceFromMeters, distanceUnit, type Units } from '$lib/units';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const SPORT_COLOR_VAR: Record<'swim' | 'bike' | 'run' | 'other', string> = {
-	swim: 'var(--swim)',
-	bike: 'var(--bike)',
-	run: 'var(--run)',
-	other: 'var(--muted)'
-};
-
-const SPORT_TAG: Record<'swim' | 'bike' | 'run' | 'other', string> = {
-	swim: 'SWIM',
-	bike: 'BIKE',
-	run: 'RUN',
-	other: 'OTHER'
-};
 
 export type ActivityListRow = {
 	id: string;
@@ -91,8 +77,8 @@ function shapeRow(a: DbActivity, prefs: ThresholdPrefs | null, units: Units): Ac
 		id: a.id,
 		sport,
 		sportLabel: a.sport,
-		tag: SPORT_TAG[sport],
-		color: SPORT_COLOR_VAR[sport],
+		tag: SPORT_TAG[a.sport],
+		color: SPORT_COLOR_VAR[a.sport],
 		date: formatDate(new Date(a.startTime)),
 		startTimeMs: new Date(a.startTime).getTime(),
 		title: a.title,

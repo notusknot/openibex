@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import SummaryCard from '$lib/components/ui/SummaryCard.svelte';
 	import {
 		activeRangeCount,
 		emptyRanges,
@@ -103,6 +104,19 @@
 	function showMore() {
 		renderLimit += PAGE_SIZE;
 	}
+
+	$: summaryCards = [
+		{ label: 'Shown', value: visibleSummary.count, sub: 'activities', accent: 'var(--green)' },
+		{ label: 'Load', value: visibleSummary.tss, sub: 'total TSS', accent: 'var(--c-fat)' },
+		{
+			label: 'Distance',
+			value: visibleSummary.distance,
+			unit: visibleSummary.distanceUnit,
+			sub: 'combined',
+			accent: 'var(--run)'
+		},
+		{ label: 'Time', value: visibleSummary.hours, unit: 'h', sub: 'moving time', accent: 'var(--c-form)' }
+	];
 </script>
 
 <svelte:window on:click={onWindowClick} on:keydown={onKeydown} />
@@ -120,30 +134,9 @@
 	</header>
 
 	<div class="summary-strip">
-		<div class="summary-card sum-shown">
-			<div class="sum-label oi-mono">Shown</div>
-			<div class="sum-val oi-mono">{visibleSummary.count}</div>
-			<div class="sum-sub oi-mono">activities</div>
-		</div>
-		<div class="summary-card sum-load">
-			<div class="sum-label oi-mono">Load</div>
-			<div class="sum-val oi-mono">{visibleSummary.tss}</div>
-			<div class="sum-sub oi-mono">total TSS</div>
-		</div>
-		<div class="summary-card sum-distance">
-			<div class="sum-label oi-mono">Distance</div>
-			<div class="sum-val oi-mono">
-				{visibleSummary.distance}<span class="sum-unit"> {visibleSummary.distanceUnit}</span>
-			</div>
-			<div class="sum-sub oi-mono">combined</div>
-		</div>
-		<div class="summary-card sum-time">
-			<div class="sum-label oi-mono">Time</div>
-			<div class="sum-val oi-mono">
-				{visibleSummary.hours}<span class="sum-unit">h</span>
-			</div>
-			<div class="sum-sub oi-mono">moving time</div>
-		</div>
+		{#each summaryCards as c}
+			<SummaryCard {...c} />
+		{/each}
 	</div>
 
 	<div class="search-row">
@@ -352,48 +345,6 @@
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
 		gap: 10px;
-	}
-	.summary-card {
-		background: var(--card);
-		border: 1px solid var(--line);
-		border-top: 2px solid var(--green);
-		border-radius: 8px;
-		padding: 12px 14px;
-	}
-	.sum-shown {
-		border-top-color: var(--green);
-	}
-	.sum-load {
-		border-top-color: var(--c-fat);
-	}
-	.sum-distance {
-		border-top-color: var(--run);
-	}
-	.sum-time {
-		border-top-color: var(--c-form);
-	}
-	.sum-label {
-		font-size: 8.5px;
-		letter-spacing: 0.08em;
-		color: var(--faint);
-		text-transform: uppercase;
-	}
-	.sum-val {
-		font-size: 24px;
-		font-weight: 600;
-		color: var(--ink);
-		margin-top: 6px;
-		line-height: 1;
-	}
-	.sum-unit {
-		font-size: 13px;
-		color: var(--faint);
-		margin-left: 2px;
-	}
-	.sum-sub {
-		font-size: 9.5px;
-		color: var(--muted);
-		margin-top: 5px;
 	}
 
 	/* Search box: full-width, lines up visually with the table below it. The

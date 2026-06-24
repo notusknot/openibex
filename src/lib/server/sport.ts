@@ -12,3 +12,22 @@ export const SPORT_DISPLAY: Record<Sport, SportKey> = {
 	Strength: 'other',
 	Other: 'other'
 };
+
+/** Sport → CSS color var for its badge/accent. Strength and Other are neutral. */
+export const SPORT_COLOR_VAR: Record<Sport, string> = {
+	Swim: 'var(--swim)',
+	Bike: 'var(--bike)',
+	Run: 'var(--run)',
+	Strength: 'var(--muted)',
+	Other: 'var(--muted)'
+};
+
+/** Sport → uppercase badge text. Keyed by the real sport so Strength reads
+ *  "STRENGTH" everywhere (list, detail, calendar), not the generic "OTHER". */
+export const SPORT_TAG: Record<Sport, string> = {
+	Swim: 'SWIM',
+	Bike: 'BIKE',
+	Run: 'RUN',
+	Strength: 'STRENGTH',
+	Other: 'OTHER'
+};

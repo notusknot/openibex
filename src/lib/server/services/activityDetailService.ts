@@ -21,6 +21,7 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
+import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/server/sport';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 import {
 	distanceLabel,
@@ -31,22 +32,6 @@ import {
 	paceUnit,
 	type Units
 } from '$lib/units';
-
-const SPORT_COLOR_VAR: Record<Sport, string> = {
-	Bike: 'var(--bike)',
-	Run: 'var(--run)',
-	Swim: 'var(--swim)',
-	Strength: 'var(--muted)',
-	Other: 'var(--muted)'
-};
-
-const SPORT_TAG: Record<Sport, string> = {
-	Bike: 'BIKE',
-	Run: 'RUN',
-	Swim: 'SWIM',
-	Strength: 'STRENGTH',
-	Other: 'OTHER'
-};
 
 const HR_ZONE_NAMES = ['Z1 · Recovery', 'Z2 · Endurance', 'Z3 · Tempo', 'Z4 · Threshold', 'Z5 · VO₂'];
 const HR_ZONE_COLORS = ['#9fc2a8', '#3c7a53', '#d2a03a', '#c0892e', '#9a4b2e'];
