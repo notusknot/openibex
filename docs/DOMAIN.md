@@ -1,8 +1,8 @@
 # Domain model & invariants
 
-The durable source of truth for *what the numbers mean* and *what the data guarantees are*.
-Formulas here describe how **we** compute things — they are deliberately simple and transparent,
-not proprietary. When the code and this doc disagree, fix one of them; don't let them drift.
+The durable source of truth for what the numbers mean and what the data guarantees are.
+Formulas here describe how OpenIbex computes things. They are deliberately simple and transparent,
+not proprietary. When the code and this doc disagree, fix one of them.
 
 Implementation lives in `src/lib/server/services/analytics/` (load + analytics page) and
 `src/lib/server/services/dashboardService.ts` (the cockpit dashboard).

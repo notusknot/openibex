@@ -1,9 +1,8 @@
 # Roadmap
 
-> **This file holds only what is PLANNED.** When something ships, it moves **out** of here and
-> **into** [CHANGELOG.md](CHANGELOG.md). Never record completion state in this file — there are
-> no "done" checkboxes here. Anything shipped (e.g. the M8–M12 UI redesign, activities
-> search/filter/sort, SQLite/shutdown/sync hardening) lives in the changelog, not here.
+> **This file holds only what is planned.** When a feature is completed, it moves out of here and
+> into [CHANGELOG.md](CHANGELOG.md). Never record completion state in this file — there are
+> no "done" checkboxes here. Anything completed lives in the changelog, not here.
 
 Items are grouped by theme, not committed to a release or a date. Domain formulas referenced
 below are defined in [docs/DOMAIN.md](docs/DOMAIN.md).
@@ -26,10 +25,8 @@ below are defined in [docs/DOMAIN.md](docs/DOMAIN.md).
 - **Per-workout fueling** — recommended carbohydrate and electrolyte targets by workout
   duration and intensity.
 - **Route recommendations** — suggest routes based on history and target workout.
-- **Activities bulk edit** — multi-select on the activities page to edit/delete in bulk
-  (search/filter/sort already shipped).
-- **Web Garmin bulk import** — drive the existing offline bulk importer from the web UI instead
-  of only the CLI.
+- **Activities bulk edit** — multi-select on the activities page to edit/delete in bulk.
+- **Web Garmin bulk import** — drive the existing offline bulk importer from the web UI instead of only the CLI.
 - **Native mobile app** — beyond the current installable PWA.
 
 ## Hardening & operations
@@ -44,7 +41,7 @@ below are defined in [docs/DOMAIN.md](docs/DOMAIN.md).
 
 ## Ideas / unprioritized (maintainer suggestions)
 
-Not committed work — candidates for the lists above, included for discussion. Prune freely.
+Not committed work — candidates for the lists above, included for discussion.
 
 ### Code health & hardening
 

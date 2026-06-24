@@ -9,15 +9,14 @@ capability and the patch version for fixes; breaking changes may land in a minor
 
 > **Workflow:** every code change adds an entry under `[Unreleased]` in the same commit.
 > At release time, `[Unreleased]` is cut into a dated, versioned block and the version in
-> `package.json` is bumped. Planned (not-yet-shipped) work lives in [ROADMAP.md](ROADMAP.md),
+> `package.json` is bumped. Planned work lives in [ROADMAP.md](ROADMAP.md),
 > never here.
 
 ## [Unreleased]
 
 ## [0.2.0] - 2026-06-24
 
-The second wave: a live (experimental) Garmin Connect sync, a broad production-hardening
-pass, a full UI redesign, and the activities filtering workflow.
+Live (experimental) Garmin Connect sync, a broad production-hardening pass, a full UI redesign, and the activities filtering workflow.
 
 ### Added
 - **Experimental Garmin Connect sync** — opt-in, logs in via the unofficial `garmin-connect`
