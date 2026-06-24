@@ -173,7 +173,12 @@ export async function listRecentActivitiesForUser(userId: string, limit: number)
 
 export async function listAllActivitiesForUser(userId: string): Promise<DbActivity[]> {
 	const db = getDb();
-	return db.select().from(activities).where(eq(activities.userId, userId)).all();
+	return db
+		.select()
+		.from(activities)
+		.where(eq(activities.userId, userId))
+		.orderBy(desc(activities.startTime))
+		.all();
 }
 
 export async function listActivitiesForUserInTimeRange(input: {

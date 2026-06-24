@@ -1,5 +1,6 @@
 import {
 	countActivitiesForUser,
+	listAllActivitiesForUser,
 	listRecentActivitiesForUser,
 	type DbActivity
 } from '$lib/server/repositories/activitiesRepository';
@@ -43,7 +44,9 @@ export type ActivityListRow = {
 	tag: string;
 	color: string;
 	date: string; // "Mon 6/21"
+	startTimeMs: number; // epoch ms, for client-side date sorting
 	title: string;
+	searchText: string; // lowercased title + description, for client-side search
 	distanceM: number; // raw; 0 if missing
 	distanceDisplay: number; // already converted to user units
 	distanceLabel: string; // "13.4" or "—"
@@ -70,7 +73,6 @@ export type ActivitiesListData = {
 	rows: ActivityListRow[];
 	summary: ActivityListSummary;
 	totalCount: number; // total activities in DB for this user (for "Showing X of Y")
-	shownLimit: number; // requested limit
 };
 
 function formatDate(d: Date): string {
@@ -99,7 +101,9 @@ function shapeRow(a: DbActivity, prefs: ThresholdPrefs | null, units: Units): Ac
 		tag: SPORT_TAG[sport],
 		color: SPORT_COLOR_VAR[sport],
 		date: formatDate(new Date(a.startTime)),
+		startTimeMs: new Date(a.startTime).getTime(),
 		title: a.title,
+		searchText: `${a.title} ${a.description ?? ''}`.toLowerCase(),
 		distanceM: distM,
 		distanceDisplay: distDisplay,
 		distanceLabel: distM > 0 ? distDisplay.toFixed(1) : '—',
@@ -115,18 +119,35 @@ function shapeRow(a: DbActivity, prefs: ThresholdPrefs | null, units: Units): Ac
 	};
 }
 
+/**
+ * Shape a user's activities for the list UI.
+ *
+ * Omit `limit` to load the full set — the activities page ships every row to the
+ * browser and runs search / sport-filter / pagination entirely client-side, so
+ * it needs them all up front. Pass `limit` for a recent-N slice (e.g. the
+ * dashboard's "recent activities"), which keeps the cheap count query so
+ * "X of Y" displays stay accurate against the whole table.
+ */
 export async function getActivitiesList(input: {
 	userId: string;
 	limit?: number;
 	prefs?: UserPreferences | null;
 }): Promise<ActivitiesListData> {
-	const shownLimit = input.limit ?? 50;
 	const prefs = input.prefs ?? null;
 	const units: Units = prefs?.units ?? 'imperial';
-	const [activities, totalCount] = await Promise.all([
-		listRecentActivitiesForUser(input.userId, shownLimit),
-		countActivitiesForUser(input.userId)
-	]);
+
+	let activities: DbActivity[];
+	let totalCount: number;
+	if (input.limit === undefined) {
+		activities = await listAllActivitiesForUser(input.userId);
+		totalCount = activities.length;
+	} else {
+		[activities, totalCount] = await Promise.all([
+			listRecentActivitiesForUser(input.userId, input.limit),
+			countActivitiesForUser(input.userId)
+		]);
+	}
+
 	const rows = activities.map((a) => shapeRow(a, prefs, units));
 
 	const totalDistanceM = activities.reduce((acc, a) => acc + (a.distanceM ?? 0), 0);
@@ -138,5 +159,5 @@ export async function getActivitiesList(input: {
 		hours: Math.round((rows.reduce((acc, r) => acc + r.durationSec, 0) / 3600) * 10) / 10
 	};
 
-	return { rows, summary, totalCount, shownLimit };
+	return { rows, summary, totalCount };
 }
