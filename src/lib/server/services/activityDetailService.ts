@@ -22,6 +22,8 @@ import {
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
 import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/server/sport';
+import type { ActivityTrack, TrackPoint } from '$lib/track';
+import { HR_ZONE_COLORS, HR_ZONE_NAMES, hrZoneIndex } from '$lib/zones';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 import {
 	distanceLabel,
@@ -33,18 +35,9 @@ import {
 	type Units
 } from '$lib/units';
 
-const HR_ZONE_NAMES = ['Z1 · Recovery', 'Z2 · Endurance', 'Z3 · Tempo', 'Z4 · Threshold', 'Z5 · VO₂'];
-const HR_ZONE_COLORS = ['#9fc2a8', '#3c7a53', '#d2a03a', '#c0892e', '#9a4b2e'];
-const HR_ZONE_THRESHOLD_PCT = [0, 0.6, 0.7, 0.8, 0.9]; // lower bound of each zone as fraction of maxHr
-
-export type ActivityChartSeries = {
-	available: boolean;
-	hasPace: boolean;
-	n: number;
-	hr: number[];
-	paceSec: number[];
-	durationSec: number;
-};
+// The shared point + track types live in `$lib/track` (isomorphic) so client
+// components can import them too; re-exported here for existing call sites.
+export type { TrackPoint, ActivityTrack, ActivityTrackMetrics } from '$lib/track';
 
 export type ActivityLapRow = {
 	label: string;
@@ -84,11 +77,10 @@ export type ActivityDetailData = {
 	} | null;
 	planned: { id: string; title: string; scheduledDate: string } | null;
 	summaryStats: ActivitySummaryStat[];
-	chart: ActivityChartSeries;
+	track: ActivityTrack;
 	laps: ActivityLapRow[];
 	hrZones: ActivityHrZone[];
 	peaks: ActivityPeak[];
-	route: { hasGps: boolean; distanceLabel: string; elevationLabel: string };
 };
 
 function asFiniteNumber(v: unknown): number | null {
@@ -139,23 +131,17 @@ function fmtDateLong(d: Date): string {
 }
 
 
-// Bucket-mean downsample to `target` points, preserving x-monotonic structure.
-function downsample(values: number[], target: number): number[] {
-	if (values.length <= target) return values.slice();
-	const out: number[] = new Array(target);
+// Evenly pick up to `target` items across the full range (first and last always
+// kept), preserving order. This bounds the shared point array — the map and the
+// charts both render from it — by time/order rather than by GPS geometry:
+// geometry-based simplification (Douglas–Peucker) would drop points on straight
+// sections even where elevation/pace are changing, flattening the charts.
+function sampleEven<T>(arr: T[], target: number): T[] {
+	const n = arr.length;
+	if (n <= target || target < 2) return arr.slice();
+	const out: T[] = new Array(target);
 	for (let i = 0; i < target; i++) {
-		const lo = Math.floor((i / target) * values.length);
-		const hi = Math.max(lo + 1, Math.floor(((i + 1) / target) * values.length));
-		let sum = 0;
-		let count = 0;
-		for (let j = lo; j < hi && j < values.length; j++) {
-			const v = values[j];
-			if (v !== null && v !== undefined && Number.isFinite(v)) {
-				sum += v;
-				count += 1;
-			}
-		}
-		out[i] = count > 0 ? sum / count : 0;
+		out[i] = arr[Math.round((i / (target - 1)) * (n - 1))]!;
 	}
 	return out;
 }
@@ -184,15 +170,7 @@ export function computeHrZones(hrSamples: number[], maxHrHint: number | null): A
 	const counts = [0, 0, 0, 0, 0];
 	for (const hr of hrSamples) {
 		if (!Number.isFinite(hr) || hr <= 0) continue;
-		const pct = hr / maxRef;
-		let zone = 0;
-		for (let z = HR_ZONE_THRESHOLD_PCT.length - 1; z >= 0; z--) {
-			if (pct >= HR_ZONE_THRESHOLD_PCT[z]!) {
-				zone = z;
-				break;
-			}
-		}
-		counts[zone]! += 1;
+		counts[hrZoneIndex(hr, maxRef)]! += 1;
 	}
 	const total = counts.reduce((a, b) => a + b, 0);
 	if (total === 0) return [];
@@ -267,7 +245,16 @@ export async function getActivityDetail(input: {
 	const rawSpeed: number[] = [];
 	const cumDist: number[] = [];
 	const cumTime: number[] = [];
+	const rawPoints: TrackPoint[] = [];
 	const startMs = new Date(activity.startTime).getTime();
+
+	// Pace from speed: pace[sec/km] = 1000 / speed[m/s]. Cap at 20:00/km so stops
+	// don't blow out the axis (matches the previous chart behavior).
+	const PACE_CAP = 1200;
+
+	let gpsCount = 0;
+	let powerSeen = false;
+	let elevSeen = false;
 
 	for (const r of records) {
 		const hr = asFiniteNumber(r['heart_rate'] ?? r['heartRate']);
@@ -280,26 +267,69 @@ export async function getActivityDetail(input: {
 			cumDist.push(dist);
 			cumTime.push(Math.max(0, (ts.getTime() - startMs) / 1000));
 		}
+
+		// Build one shared point per record (fed to both the map and the charts).
+		// fit-file-parser yields position_lat/long already in decimal degrees.
+		const lat = asFiniteNumber(r['position_lat']);
+		const lng = asFiniteNumber(r['position_long']);
+		const hasGps =
+			lat !== null &&
+			lng !== null &&
+			Math.abs(lat) <= 90 &&
+			Math.abs(lng) <= 180 &&
+			!(lat === 0 && lng === 0); // drop the FIT "null island" sentinel
+		if (hasGps) gpsCount += 1;
+		const power = asFiniteNumber(r['power']);
+		if (power !== null && power > 0) powerSeen = true;
+		const elevation = asFiniteNumber(r['enhanced_altitude'] ?? r['altitude']);
+		if (elevation !== null) elevSeen = true;
+		const pace = speed !== null ? (speed > 0.2 ? Math.min(PACE_CAP, 1000 / speed) : PACE_CAP) : null;
+		rawPoints.push({
+			t: ts ? Math.max(0, (ts.getTime() - startMs) / 1000) : rawPoints.length,
+			lat: hasGps ? lat : null,
+			lng: hasGps ? lng : null,
+			hr,
+			pace,
+			power,
+			elevation,
+			distance: dist
+		});
 	}
 
 	const hrAvail = rawHr.length > 0;
-	const TARGET_POINTS = 200;
-	const hr = hrAvail ? downsample(rawHr, TARGET_POINTS) : [];
+	const hasPace = rawSpeed.length > 0 && rawSpeed.some((s) => s > 0.5);
 
-	// Pace from speed: pace[sec/km] = 1000 / speed[m/s]. Cap at 20:00/km for visualization.
-	const PACE_CAP = 1200;
-	const pacePerRecord = rawSpeed.map((s) => (s > 0.2 ? Math.min(PACE_CAP, 1000 / s) : PACE_CAP));
-	const hasPace = pacePerRecord.length > 0 && rawSpeed.some((s) => s > 0.5);
-	const paceSec = hasPace ? downsample(pacePerRecord, TARGET_POINTS) : [];
+	// Max-HR reference (same basis as the zone histogram), so the map can bucket
+	// points into HR zones client-side.
+	const maxHrCandidate =
+		activity.maxHr && activity.maxHr > 100 ? activity.maxHr : rawHr.length ? Math.max(...rawHr) : 0;
+	const maxHrRef = Number.isFinite(maxHrCandidate) && maxHrCandidate > 0 ? maxHrCandidate : null;
 
-	const chart: ActivityChartSeries = {
-		available: hrAvail || hasPace,
-		hasPace,
-		n: hr.length || paceSec.length,
-		hr,
-		paceSec,
-		durationSec: activity.durationSec ?? 0
-	};
+	// Shared point array driving BOTH the route map and the time-series charts.
+	// Capped by even time/order sampling (not GPS geometry — see sampleEven): most
+	// activities fall under the cap and keep every Garmin sample; only very long
+	// ones thin out, still smooth. The ~268px canvas map is unaffected by the extra
+	// density (canvas draws any segment count for free).
+	const POINT_CAP = 1800;
+	let points: TrackPoint[];
+	let bounds: ActivityTrack['bounds'] = null;
+	if (gpsCount >= 2) {
+		const gpsPoints = rawPoints.filter((p) => p.lat !== null && p.lng !== null);
+		points = sampleEven(gpsPoints, POINT_CAP);
+		let minLat = Infinity;
+		let maxLat = -Infinity;
+		let minLng = Infinity;
+		let maxLng = -Infinity;
+		for (const p of points) {
+			minLat = Math.min(minLat, p.lat!);
+			maxLat = Math.max(maxLat, p.lat!);
+			minLng = Math.min(minLng, p.lng!);
+			maxLng = Math.max(maxLng, p.lng!);
+		}
+		bounds = { minLat, maxLat, minLng, maxLng };
+	} else {
+		points = sampleEven(rawPoints, POINT_CAP);
+	}
 
 	// Laps shape
 	const maxLapHr = lapsRaw.reduce((acc, l) => {
@@ -402,8 +432,14 @@ export async function getActivityDetail(input: {
 		}
 	];
 
-	const route = {
-		hasGps: cumDist.length > 0,
+	const track: ActivityTrack = {
+		hasGps: bounds !== null,
+		points,
+		bounds,
+		metrics: { hr: hrAvail, pace: hasPace, power: powerSeen, elevation: elevSeen },
+		maxHrRef,
+		units,
+		durationSec: activity.durationSec ?? 0,
 		distanceLabel:
 			distanceM > 0 ? `${distanceLabel(distanceM, units, 1)} ${distanceUnit(units)}` : '—',
 		elevationLabel:
@@ -440,11 +476,10 @@ export async function getActivityDetail(input: {
 		link: linkOut,
 		planned: plannedOut,
 		summaryStats,
-		chart,
+		track,
 		laps,
 		hrZones,
-		peaks,
-		route
+		peaks
 	};
 }
 
