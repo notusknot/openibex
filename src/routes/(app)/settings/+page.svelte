@@ -438,7 +438,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		max-width: 920px;
+		max-width: 900px;
+		margin-inline: auto;
 	}
 
 	.head {

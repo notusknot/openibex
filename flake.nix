@@ -14,6 +14,7 @@
         packages = with pkgs; [
           # Core developer tools
           git
+          gh
           gnumake
           just
           curl

@@ -44,12 +44,12 @@ the CI checks register, then:
   - ☑️ **Require branches to be up to date before merging**
   - Add these required checks (they appear after the workflow has run once — they are the CI
     **job names**):
-    - `Typecheck · Test · Build`
-    - `CHANGELOG updated`
-    - `Docker health smoke test`
-- ☑️ **Block force pushes**
-- ☑️ **Restrict deletions**
-- Optional: **Require linear history**; **Do not allow bypassing the above settings** (applies the
+    - `typecheck · test · build`
+    - `changelog updated`
+    - `docker health smoke test`
+- ☑️ **block force pushes**
+- ☑️ **restrict deletions**
+- optional: **require linear history**; **do not allow bypassing the above settings** (applies the
   rule to admins too).
 
 Once this is on, a feature branch can only reach `main` through a PR whose CI is green — which is
