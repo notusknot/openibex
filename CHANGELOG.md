@@ -19,6 +19,8 @@ capability and the patch version for fixes; breaking changes may land in a minor
   changelog-touched gate on PRs; and a `docker compose` health smoke test against `/api/health`.
 - **Git pre-commit hook** — tracked in `.githooks/`, auto-wired via the `prepare` script; runs
   `pnpm check` + `pnpm test` before each commit.
+- **Claude Code commit guard** — a `PreToolUse` hook (`.claude/`) that blocks the agent from
+  committing on `main` or with failing tests.
 
 ## [0.2.0] - 2026-06-24
 
