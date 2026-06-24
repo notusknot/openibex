@@ -30,7 +30,8 @@
     "analytics:rebuild": "tsx scripts/rebuild-daily-metrics.ts",
     "titles:backfill": "tsx scripts/backfill-activity-titles.ts",
     "cleanup:ghosts": "tsx scripts/cleanup-ghost-activities.ts",
-    "audit": "pnpm audit --prod"
+    "audit": "pnpm audit --prod",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@sveltejs/adapter-node": "^2.0.0",

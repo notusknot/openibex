@@ -94,6 +94,19 @@ pnpm test         # vitest
 pnpm check        # svelte-check (types + svelte)
 ```
 
+### Git hooks
+
+`pnpm install` wires the tracked git hooks automatically (via the `prepare` script). To enable
+them by hand:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The pre-commit hook runs `pnpm check` + `pnpm test` and aborts the commit on failure. It's local
+and bypassable (`git commit --no-verify`); CI on pull requests is the real gate. See
+[docs/development.md](docs/development.md).
+
 ### Database
 
 Drizzle ORM with Drizzle Kit migrations. Migrations apply automatically on server startup. During development:

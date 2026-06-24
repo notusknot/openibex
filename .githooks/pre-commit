@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+#
+# OpenIbex pre-commit gate (no dependencies).
+# Wired via `git config core.hooksPath .githooks` — the `prepare` npm script sets
+# this automatically on `pnpm install`.
+#
+# Runs the same static gate as CI: svelte-check + the test suite (both fast, ~7s).
+# Bypass in a pinch with `git commit --no-verify`. This hook is LOCAL and bypassable;
+# the real, unbypassable gate is CI + branch protection (see docs/development.md).
+
+set -e
+
+echo "[pre-commit] pnpm check (svelte-check)…"
+pnpm check
+
+echo "[pre-commit] pnpm test…"
+pnpm test
+
+echo "[pre-commit] ✓ checks passed"

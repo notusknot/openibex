@@ -17,6 +17,8 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ### Added
 - **Continuous integration** (GitHub Actions) — typecheck (`pnpm check`), test, and build; a
   changelog-touched gate on PRs; and a `docker compose` health smoke test against `/api/health`.
+- **Git pre-commit hook** — tracked in `.githooks/`, auto-wired via the `prepare` script; runs
+  `pnpm check` + `pnpm test` before each commit.
 
 ## [0.2.0] - 2026-06-24
 
