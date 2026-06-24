@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
+	import { formatPercent as pct } from '$lib/units';
 
 	export let data: PageData;
 	$: detail = data.detail;
@@ -116,10 +117,6 @@
 		if (hoverIdx !== i) hoverIdx = i;
 	}
 
-	function pct(v: number | null): string {
-		if (v === null || v === undefined) return '—';
-		return `${Math.round(v * 100)}%`;
-	}
 </script>
 
 <section class="detail">

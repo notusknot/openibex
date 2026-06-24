@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BackLink from '$lib/components/ui/BackLink.svelte';
+	import { formatPercent as pct } from '$lib/units';
 
 	type Sport = 'Bike' | 'Run' | 'Swim' | 'Strength' | 'Other';
 	export let data: {
@@ -98,10 +99,6 @@
 		const m = Math.floor(s / 60);
 		const ss = s % 60;
 		return `${m}:${ss.toString().padStart(2, '0')}`;
-	}
-
-	function pct(v: number | null) {
-		return v === null ? '—' : `${Math.round(v * 100)}%`;
 	}
 
 	function fmtTime(d: Date) {

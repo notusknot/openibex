@@ -4,18 +4,11 @@ import { listWorkoutLinksForPlannedWorkouts } from '$lib/server/repositories/wor
 import { listPlannedWorkouts } from '$lib/server/services/plannedWorkoutsService';
 import { ensureAutoMatchesForRange } from '$lib/server/services/workoutMatchingService';
 import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
-import { monthEndDate, monthStartDate } from '$lib/validation/localDate';
+import { SPORT_DISPLAY } from '$lib/server/sport';
+import { formatLocalDate as localDateIso, monthEndDate, monthStartDate } from '$lib/validation/localDate';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-const SPORT_DISPLAY: Record<Sport, 'swim' | 'bike' | 'run' | 'other'> = {
-	Swim: 'swim',
-	Bike: 'bike',
-	Run: 'run',
-	Strength: 'other',
-	Other: 'other'
-};
 
 export type CalendarSportKey = 'swim' | 'bike' | 'run' | 'other';
 
@@ -68,10 +61,6 @@ function pad(n: number): string {
 
 function toMonthParam(year: number, month: number): string {
 	return `${year}-${pad(month)}`;
-}
-
-function localDateIso(d: Date): string {
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function monthLongLabel(year: number, month: number): string {

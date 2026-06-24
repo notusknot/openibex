@@ -10,18 +10,11 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
+import { SPORT_DISPLAY } from '$lib/server/sport';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 import { distanceFromMeters, distanceUnit, type Units } from '$lib/units';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const SPORT_DISPLAY: Record<Sport, 'swim' | 'bike' | 'run' | 'other'> = {
-	Swim: 'swim',
-	Bike: 'bike',
-	Run: 'run',
-	Strength: 'other',
-	Other: 'other'
-};
 
 const SPORT_COLOR_VAR: Record<'swim' | 'bike' | 'run' | 'other', string> = {
 	swim: 'var(--swim)',

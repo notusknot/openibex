@@ -69,17 +69,7 @@ export async function createPlannedWorkoutForUser(input: {
 	plannedLoad: number | null;
 }): Promise<{ id: string }> {
 	const id = crypto.randomUUID();
-	await createPlannedWorkout({
-		id,
-		userId: input.userId,
-		sport: input.sport,
-		scheduledDate: input.scheduledDate,
-		title: input.title,
-		description: input.description,
-		plannedDurationSec: input.plannedDurationSec,
-		plannedDistanceM: input.plannedDistanceM,
-		plannedLoad: input.plannedLoad
-	});
+	await createPlannedWorkout({ id, ...input });
 	return { id };
 }
 
@@ -98,17 +88,7 @@ export async function updatePlannedWorkoutForUserService(input: {
 	if (!existing) {
 		throw new Error('Not found.');
 	}
-	await updatePlannedWorkoutForUser({
-		id: input.id,
-		userId: input.userId,
-		sport: input.sport,
-		scheduledDate: input.scheduledDate,
-		title: input.title,
-		description: input.description,
-		plannedDurationSec: input.plannedDurationSec,
-		plannedDistanceM: input.plannedDistanceM,
-		plannedLoad: input.plannedLoad
-	});
+	await updatePlannedWorkoutForUser(input);
 }
 
 export async function deletePlannedWorkoutForUserService(input: {

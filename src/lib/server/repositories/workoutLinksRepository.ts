@@ -23,16 +23,6 @@ export async function listWorkoutLinksForPlannedWorkouts(userId: string, planned
 		.all();
 }
 
-export async function listWorkoutLinksForActivities(userId: string, activityIds: string[]): Promise<DbWorkoutLink[]> {
-	if (activityIds.length === 0) return [];
-	const db = getDb();
-	return db
-		.select()
-		.from(workoutLinks)
-		.where(and(eq(workoutLinks.userId, userId), inArray(workoutLinks.activityId, activityIds)))
-		.all();
-}
-
 export async function getWorkoutLinkForActivity(userId: string, activityId: string): Promise<DbWorkoutLink | undefined> {
 	const db = getDb();
 	return db
@@ -67,29 +57,6 @@ export async function createWorkoutLink(input: {
 			createdAt: now,
 			updatedAt: now
 		})
-		.run();
-}
-
-export async function updateWorkoutLink(input: {
-	userId: string;
-	plannedWorkoutId: string;
-	activityId: string;
-	matchType: WorkoutLinkMatchType;
-	durationCompliance?: number | null;
-	distanceCompliance?: number | null;
-	loadCompliance?: number | null;
-}): Promise<void> {
-	const db = getDb();
-	db.update(workoutLinks)
-		.set({
-			activityId: input.activityId,
-			matchType: input.matchType,
-			durationCompliance: input.durationCompliance ?? null,
-			distanceCompliance: input.distanceCompliance ?? null,
-			loadCompliance: input.loadCompliance ?? null,
-			updatedAt: new Date()
-		})
-		.where(and(eq(workoutLinks.userId, input.userId), eq(workoutLinks.plannedWorkoutId, input.plannedWorkoutId)))
 		.run();
 }
 

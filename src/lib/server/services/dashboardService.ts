@@ -8,18 +8,12 @@ import {
 } from '$lib/server/services/activitiesListService';
 import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
+import { SPORT_DISPLAY } from '$lib/server/sport';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TC = 42;
 const ATL_TC = 7;
-const SPORT_DISPLAY: Record<Sport, 'swim' | 'bike' | 'run' | 'other'> = {
-	Swim: 'swim',
-	Bike: 'bike',
-	Run: 'run',
-	Strength: 'other',
-	Other: 'other'
-};
 
 export type DashboardKpis = {
 	fitness: number;

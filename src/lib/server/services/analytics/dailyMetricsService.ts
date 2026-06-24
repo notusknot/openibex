@@ -2,16 +2,10 @@ import type { Sport } from '$lib/server/db/schema';
 import { listAllActivitiesForUser } from '$lib/server/repositories/activitiesRepository';
 import { deleteDailyMetricsForUser, insertDailyMetricsRows } from '$lib/server/repositories/dailyMetricsRepository';
 import { fallbackLoadScore } from '$lib/server/services/analytics/load';
+import { formatLocalDate as localDateIso } from '$lib/validation/localDate';
 
 function clampTo0(x: number | null | undefined): number {
 	return x && Number.isFinite(x) ? x : 0;
-}
-
-function localDateIso(d: Date): string {
-	const yyyy = String(d.getFullYear());
-	const mm = String(d.getMonth() + 1).padStart(2, '0');
-	const dd = String(d.getDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
 }
 
 type AggKey = string; // `${date}::${sport ?? ''}`

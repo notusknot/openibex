@@ -6,6 +6,7 @@ import {
 } from '$lib/server/repositories/analyticsRepository';
 import { fallbackLoadScore } from '$lib/server/services/analytics/load';
 import { weekStartIsoMonday } from '$lib/server/services/analytics/time';
+import { formatLocalDate as localDateIso } from '$lib/validation/localDate';
 
 export type WeeklyRow = {
 	weekStart: string; // YYYY-MM-DD Monday
@@ -18,13 +19,6 @@ export type FitnessRow = { date: string; load: number; fitness: number; fatigue:
 
 function clampTo0(x: number | null | undefined): number {
 	return x && Number.isFinite(x) ? x : 0;
-}
-
-function localDateIso(d: Date): string {
-	const yyyy = String(d.getFullYear());
-	const mm = String(d.getMonth() + 1).padStart(2, '0');
-	const dd = String(d.getDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
 }
 
 function ratio(sumCompleted: number, sumPlanned: number): number | null {

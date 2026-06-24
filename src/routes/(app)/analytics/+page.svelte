@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatPercent as pct } from '$lib/units';
+
 	type Sport = 'Bike' | 'Run' | 'Swim' | 'Strength' | 'Other';
 	type WeeklyRow = {
 		weekStart: string;
@@ -33,11 +35,6 @@
 	function km(m: number) {
 		return (m / 1000).toFixed(1);
 	}
-	function pct(v: number | null) {
-		if (v === null) return '—';
-		return `${Math.round(v * 100)}%`;
-	}
-
 	function svgPath(rows: FitnessRow[], key: keyof FitnessRow, width: number, height: number) {
 		if (rows.length === 0) return '';
 		const values = rows.map((r) => Number(r[key]));

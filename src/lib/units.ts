@@ -67,14 +67,9 @@ export function paceUnit(units: Units): string {
 	return units === 'imperial' ? '/mi' : '/km';
 }
 
-// Convenience: distance + unit in one string, e.g. "13.4 km" / "8.3 mi".
-export function distanceWithUnit(
-	meters: number | null | undefined,
-	units: Units,
-	decimals = 1
-): string {
-	if (meters === null || meters === undefined || !Number.isFinite(meters) || meters <= 0) {
-		return '—';
-	}
-	return `${distanceLabel(meters, units, decimals)} ${distanceUnit(units)}`;
+// Format a 0..1 ratio as a whole-number percent, e.g. 0.847 → "85%". Null /
+// missing / non-finite → em-dash.
+export function formatPercent(value: number | null | undefined): string {
+	if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+	return `${Math.round(value * 100)}%`;
 }

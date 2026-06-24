@@ -58,12 +58,6 @@ export async function removeStreamBlob(activityId: string): Promise<void> {
 	await removeFile(streamRelativePath(activityId));
 }
 
-export async function readUploadFile(relativePath: string): Promise<Uint8Array> {
-	const env = getEnv();
-	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, relativePath);
-	return fs.readFile(absolutePath);
-}
-
 export async function readStreamBlob(activityId: string): Promise<unknown | null> {
 	const env = getEnv();
 	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, streamRelativePath(activityId));

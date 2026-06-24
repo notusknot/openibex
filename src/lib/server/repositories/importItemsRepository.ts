@@ -75,21 +75,6 @@ export async function listImportItemsForBatchUser(input: {
 		.all();
 }
 
-export async function listFailedImportItemsForBatchUser(input: {
-	batchId: string;
-	userId: string;
-	limit: number;
-}): Promise<DbImportItem[]> {
-	const db = getDb();
-	return db
-		.select()
-		.from(importItems)
-		.where(and(eq(importItems.batchId, input.batchId), eq(importItems.userId, input.userId), eq(importItems.status, 'failed')))
-		.orderBy(desc(importItems.createdAt))
-		.limit(input.limit)
-		.all();
-}
-
 export async function listProblemImportItemsForBatchUser(input: {
 	batchId: string;
 	userId: string;

@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { activityFiles, type ActivityFileType } from '$lib/server/db/schema';
 
@@ -57,16 +57,5 @@ export async function deleteActivityFileForUser(input: { id: string; userId: str
 	db.delete(activityFiles)
 		.where(and(eq(activityFiles.id, input.id), eq(activityFiles.userId, input.userId)))
 		.run();
-}
-
-export async function listActivityFilesForUser(userId: string, limit: number): Promise<DbActivityFile[]> {
-	const db = getDb();
-	return db
-		.select()
-		.from(activityFiles)
-		.where(eq(activityFiles.userId, userId))
-		.orderBy(desc(activityFiles.uploadedAt))
-		.limit(limit)
-		.all();
 }
 
