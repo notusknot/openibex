@@ -81,6 +81,8 @@ pnpm dev          # http://localhost:3000
 
 Requires Node.js 20+ (the repo's Nix flake pins Node 22) and pnpm 10+. If you use Nix, `direnv allow` sets up the toolchain and environment automatically.
 
+> **Contributing?** See [docs/development.md](docs/development.md) for the full feature lifecycle (branch → PR → merge), the enforcement model, and how to cut a release.
+
 If `/api/health` returns a `better-sqlite3` "Could not locate the bindings file" error, the native build didn't run, you can rebuild it:
 
 ```bash

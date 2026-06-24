@@ -31,6 +31,26 @@ are *not* guarantees. A `--no-verify` flag skips the git hook, and the Claude ho
 the agent — neither stops a determined human or another tool. The enforcement that cannot be
 bypassed is **branch protection requiring the CI checks to pass**. Configure it.
 
+## Feature lifecycle
+
+Every change follows the same loop — small commits on a short-lived branch, merged through a
+green PR:
+
+1. **Branch from fresh `main`:** `git checkout main && git pull --ff-only`, then
+   `git checkout -b feat/short-name` (prefixes: `feat/ fix/ chore/ docs/ refactor/`).
+2. **Commit small.** Each code change updates `CHANGELOG.md` `[Unreleased]` in the *same* commit;
+   if it ships a `ROADMAP.md` item, delete that line in the same commit too. The pre-commit hook
+   runs `pnpm check` + `pnpm test` automatically.
+3. **Final gate before the PR:** `pnpm check && pnpm test && pnpm build`.
+4. **Push and open a PR** against `main`: `git push -u origin feat/short-name`. CI runs the three
+   jobs (verify · changelog · docker-smoke).
+5. **Iterate** until review approves *and* CI is green.
+6. **Merge, then clean up.** Squash for a tidy single commit on `main`, or rebase/merge to keep the
+   atomic commits; delete the branch; then `git checkout main && git pull --ff-only` and
+   `git branch -d feat/short-name`.
+
+Releases are separate and periodic — see [Cutting a release](#cutting-a-release).
+
 ## Enabling branch protection (one-time, in GitHub settings)
 
 You must do this in the GitHub UI — it isn't a repo file. First push this branch and open a PR so
