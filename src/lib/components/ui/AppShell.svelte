@@ -14,15 +14,16 @@
 		retryAt: number | null;
 	} | null = null;
 
-	type TabIcon = 'dashboard' | 'calendar' | 'activities' | 'settings';
+	type TabIcon = 'dashboard' | 'calendar' | 'activities' | 'imports' | 'settings';
 
-	// Analytics + Imports are intentionally hidden from the nav for now —
-	// the routes are still reachable by direct URL but the user hasn't
-	// committed to surfacing them yet. Re-add when ready.
+	// Analytics is intentionally hidden from the nav for now — the route is
+	// still reachable by direct URL but the user hasn't committed to surfacing
+	// it yet. Re-add when ready.
 	const navItems: { href: string; label: string; showCount?: boolean; icon: TabIcon }[] = [
 		{ href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
 		{ href: '/calendar', label: 'Calendar', icon: 'calendar' },
 		{ href: '/activities', label: 'Activities', showCount: true, icon: 'activities' },
+		{ href: '/imports', label: 'Imports', icon: 'imports' },
 		{ href: '/settings', label: 'Settings', icon: 'settings' }
 	];
 
@@ -188,6 +189,12 @@
 				{:else if item.icon === 'activities'}
 					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+					</svg>
+				{:else if item.icon === 'imports'}
+					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="7 10 12 15 17 10" />
+						<line x1="12" y1="15" x2="12" y2="3" />
 					</svg>
 				{:else if item.icon === 'settings'}
 					<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
