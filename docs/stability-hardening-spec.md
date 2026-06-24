@@ -1,3 +1,5 @@
+> ℹ️ **Wave-1 SHIPPED — retained as design rationale.** Everything specified below has landed; this doc is kept because the code (`src/lib/server/db/client.ts`, `shutdown.ts`, `db/schema.ts`) cites it for the *why*. For current state see `CHANGELOG.md`. Read the sections as historical rationale, not a to-do list.
+
 # OpenIbex — Stability Hardening Spec (Wave 1 backend core)
 
 Three changes that close the highest-severity data-safety / concurrency / reliability holes, in plug-into-Claude-Code form. They are independent — land them in order, each as its own PR.

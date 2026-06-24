@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED — NOT AUTHORITATIVE.** Historical snapshot, kept for context. It may describe plans that shipped, changed, or were dropped. For current state see `CHANGELOG.md` (shipped) and `ROADMAP.md` (planned); for how the system works now see `docs/ARCHITECTURE.md` and `docs/DOMAIN.md`. Do not treat anything below as current.
+
 # OpenIbex — Production Readiness Checklist
 
 Tracks the work to take OpenIbex from "works on my machine" to an app users trust with years of training history and personal health data (HRV, sleep, resting HR). Ordered roughly by severity. Check items off as they land; each is scoped to be a single PR or small group of PRs.
