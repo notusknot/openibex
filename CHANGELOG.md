@@ -1,0 +1,101 @@
+# Changelog
+
+All notable changes to OpenIbex are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+While the project is pre-1.0, the minor version (`0.MINOR.x`) is bumped for new
+capability and the patch version for fixes; breaking changes may land in a minor bump.
+
+> **Workflow:** every code change adds an entry under `[Unreleased]` in the same commit.
+> At release time, `[Unreleased]` is cut into a dated, versioned block and the version in
+> `package.json` is bumped. Planned work lives in [ROADMAP.md](ROADMAP.md),
+> never here.
+
+## [Unreleased]
+
+### Added
+- **Continuous integration** (GitHub Actions) — typecheck (`pnpm check`), test, and build; a
+  changelog-touched gate on PRs; and a `docker compose` health smoke test against `/api/health`.
+- **Git pre-commit hook** — tracked in `.githooks/`, auto-wired via the `prepare` script; runs
+  `pnpm check` + `pnpm test` before each commit.
+- **Claude Code commit guard** — a `PreToolUse` hook (`.claude/`) that blocks the agent from
+  committing on `main` or with failing tests.
+
+## [0.2.0] - 2026-06-24
+
+Live (experimental) Garmin Connect sync, a broad production-hardening pass, a full UI redesign, and the activities filtering workflow.
+
+### Added
+- **Experimental Garmin Connect sync** — opt-in, logs in via the unofficial `garmin-connect`
+  library, auto-syncs new activities on page load (throttled to once per 15 minutes) plus a
+  manual *Sync now*. Session tokens are encrypted at rest (`SYNC_ENCRYPTION_KEY`). No
+  background worker; no MFA.
+- **Full UI redesign** — design system (tokens, palette, typography), cockpit-style app shell,
+  and redesigned Dashboard, Calendar, Activities (list + detail), and Analytics.
+- **Activities filtering** — client-side search, range filters, and column sorting over the
+  full activity set.
+- **User preferences** — per-user thresholds (FTP / threshold HR) and units (imperial default),
+  applied app-wide.
+- **Smart activity titles** — derive titles from Garmin metadata, falling back to
+  `"TimeOfDay Sport"` instead of raw file basenames.
+- **Richer health endpoint** — `/api/health` now reports DB ping, in-flight write count, and
+  failing-sync count; wired into the Docker `HEALTHCHECK`.
+- **Structured logging** — `pino` JSON logs with credential redaction.
+- **Dependency scanning** — Dependabot config and a `pnpm audit` script.
+- **PWA / mobile** — installable PWA polish, responsive layouts, mobile bottom tab bar.
+
+### Changed
+- **Durable sync coordination** — sync lock + throttle + circuit breaker (exponential backoff)
+  moved from an in-memory map into the `sync_jobs` table, so they survive restarts and
+  coordinate across processes/tabs. Honest sync status is surfaced in the app shell.
+- **FIT parsing isolation** — parsing runs in a worker thread with a parse-time deadline and a
+  bounded record cap, protecting the event loop from large or crafted files.
+- **SQLite hardening** — full pragma set (WAL, `foreign_keys=ON`, `busy_timeout`, cache/temp
+  tuning) with a FK-enforcement test.
+- **Graceful shutdown** — on `SIGTERM`, drain in-flight writes, checkpoint the WAL, and close
+  the DB cleanly; Docker runs non-root with a stop grace period.
+- **Transactional imports** — the `activity_file` and `activity` rows commit atomically.
+- **Boot-time config validation** — fail fast on missing/invalid secrets.
+- **Dependencies** — `drizzle-orm` upgraded `0.36 → 0.45.2`; `garmin-connect` pinned to `1.6.2`.
+- **Navigation** — removed the Settings subnav; added an Imports link to the main sidebar.
+- **Bloat reduction** — deduped sport/date/percent helpers, dropped a dead UI library,
+  extracted a shared `SummaryCard`, unified sport tags, and deleted dead code.
+
+### Fixed
+- Bound FIT stream size to prevent event-loop hangs on crafted files.
+- Reject non-activity FIT files at import; add a cleanup script for ghost activities.
+- Settings form bindings now accept input (`$:` → `let`).
+- Equal calendar day-column widths regardless of title length.
+- FIT parser robustness corpus (activity variants + malformed input).
+
+### Security
+- Upgrade `drizzle-orm` to remediate a SQL-injection advisory.
+- Override `shell-quote` to the patched `>=1.8.4`.
+- Encrypt stored Garmin session tokens; redact credentials from logs and error messages.
+- Set `ORIGIN` in `docker-compose.yml` so form POSTs pass SvelteKit's CSRF check.
+
+## [0.1.0] - 2026-05-21
+
+Foundation release (milestones 0–7): a working self-hosted training platform.
+
+### Added
+- **Accounts & sessions** — registration/login with SHA-256-hashed session tokens; the first
+  registered user becomes admin; further registration gated by `OPEN_REGISTRATION`.
+- **FIT upload** — upload FIT files; parse into activities with gzip-compressed time-series
+  streams.
+- **Offline Garmin bulk import** — a CLI (`pnpm import:garmin`) that walks a Garmin data export,
+  recursively unzips, dedupes by SHA-256, and records per-file failures without aborting the
+  batch (results at `/imports`). No Garmin API or credentials.
+- **Activities** — list and detail views.
+- **Calendar & planning** — planned workouts and automatic matching of planned↔completed pairs
+  (`workout_links`).
+- **Analytics** — training load, fitness/fatigue/freshness, weekly totals, and compliance over
+  any date range; optional `daily_metrics` cache.
+- **Data export & backup** — generate a full export of user data.
+- **Deployment** — single-container Docker image, SQLite (WAL) with migrations applied
+  automatically on startup.
+
+[Unreleased]: https://github.com/notusknot/openibex/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/notusknot/openibex/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/notusknot/openibex/releases/tag/v0.1.0

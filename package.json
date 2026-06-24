@@ -1,7 +1,7 @@
 {
   "name": "openibex",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.28.0",
@@ -30,7 +30,8 @@
     "analytics:rebuild": "tsx scripts/rebuild-daily-metrics.ts",
     "titles:backfill": "tsx scripts/backfill-activity-titles.ts",
     "cleanup:ghosts": "tsx scripts/cleanup-ghost-activities.ts",
-    "audit": "pnpm audit --prod"
+    "audit": "pnpm audit --prod",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@sveltejs/adapter-node": "^2.0.0",

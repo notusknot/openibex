@@ -1,5 +1,7 @@
 # OpenIbex
 
+[![CI](https://github.com/notusknot/openibex/actions/workflows/ci.yml/badge.svg)](https://github.com/notusknot/openibex/actions/workflows/ci.yml)
+
 A self-hosted training platform for endurance athletes. 
 
 ![OpenIbex Dashboard](docs/dashboard.png)
@@ -91,6 +93,19 @@ pnpm rebuild better-sqlite3
 pnpm test         # vitest
 pnpm check        # svelte-check (types + svelte)
 ```
+
+### Git hooks
+
+`pnpm install` wires the tracked git hooks automatically (via the `prepare` script). To enable
+them by hand:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The pre-commit hook runs `pnpm check` + `pnpm test` and aborts the commit on failure. It's local
+and bypassable (`git commit --no-verify`); CI on pull requests is the real gate. See
+[docs/development.md](docs/development.md).
 
 ### Database
 

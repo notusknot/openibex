@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # svelte-check is the canonical typecheck/lint gate (no ESLint in this repo).
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  changelog:
+    name: CHANGELOG updated
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the base branch to diff against
+
+      - name: Require a CHANGELOG entry when source changes
+        run: |
+          base="origin/${{ github.base_ref }}"
+          changed="$(git diff --name-only "$base"...HEAD)"
+          echo "Changed files:"; echo "$changed"
+          # Files whose change should be reflected in the changelog.
+          if echo "$changed" | grep -qE '^(src/|scripts/|drizzle/|package\.json$|Dockerfile$|docker-compose\.yml$|\.github/workflows/)'; then
+            if echo "$changed" | grep -qx 'CHANGELOG.md'; then
+              echo "✓ Source changed and CHANGELOG.md was updated."
+            else
+              echo "::error::Source files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] in the same PR."
+              exit 1
+            fi
+          else
+            echo "✓ No source changes that require a changelog entry."
+          fi
+
+  docker-smoke:
+    name: Docker health smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create throwaway env
+        run: |
+          {
+            echo "SESSION_SECRET=$(openssl rand -base64 32)"
+            echo "OPEN_REGISTRATION=true"
+          } > .env
+
+      # The container runs as uid 1000 and writes to the ./data bind mount.
+      - name: Prepare writable data dir
+        run: mkdir -p data && chmod 777 data
+
+      - name: Build and start
+        run: docker compose up -d --build
+
+      - name: Poll /api/health until healthy (timeout ~90s)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/api/health | grep -q '"ok":true'; then
+              echo "✓ Healthy after $i attempt(s)."
+              exit 0
+            fi
+            echo "waiting for health… ($i/30)"
+            sleep 3
+          done
+          echo "::error::/api/health never reported healthy within the timeout."
+          docker compose logs
+          exit 1
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

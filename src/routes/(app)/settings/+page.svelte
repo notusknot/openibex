@@ -76,14 +76,6 @@
 		return new Date(ms).toLocaleDateString();
 	}
 
-	const SUB_NAV = [
-		{ href: '#profile', label: 'Profile' },
-		{ href: '#thresholds', label: 'Training thresholds' },
-		{ href: '#display', label: 'Units & display' },
-		{ href: '#integrations', label: 'Integrations' },
-		{ href: '#account', label: 'Account' }
-	];
-
 	function signOut() {
 		const f = document.getElementById('logoutForm');
 		if (f instanceof HTMLFormElement) f.requestSubmit();
@@ -106,12 +98,6 @@
 	</header>
 
 	<div class="layout">
-		<aside class="subnav" aria-label="Settings sections">
-			{#each SUB_NAV as item, i}
-				<a href={item.href} class="subnav-item" class:active={i === 0}>{item.label}</a>
-			{/each}
-		</aside>
-
 		<div class="content">
 			<form
 				method="POST"
@@ -452,7 +438,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		max-width: 920px;
+		max-width: 900px;
+		margin-inline: auto;
 	}
 
 	.head {
@@ -474,33 +461,9 @@
 
 	.layout {
 		display: grid;
-		grid-template-columns: 170px minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 20px;
 		align-items: start;
-	}
-
-	.subnav {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		position: sticky;
-		top: 0;
-	}
-	.subnav-item {
-		padding: 9px 12px;
-		border-radius: 8px;
-		font-size: 12.5px;
-		font-weight: 500;
-		color: var(--muted);
-		text-decoration: none;
-	}
-	.subnav-item:hover {
-		color: var(--ink);
-	}
-	.subnav-item.active {
-		font-weight: 600;
-		color: var(--green);
-		background: var(--bg-emphasis);
 	}
 
 	.content,
@@ -798,11 +761,7 @@
 
 	@media (max-width: 767px) {
 		.layout {
-			grid-template-columns: minmax(0, 1fr);
 			gap: 0;
-		}
-		.subnav {
-			display: none;
 		}
 		.card {
 			padding: 16px;

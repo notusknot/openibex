@@ -1,3 +1,5 @@
+> ⚠️ **ARCHIVED — NOT AUTHORITATIVE.** Historical snapshot, kept for context. It may describe plans that shipped, changed, or were dropped. For current state see `CHANGELOG.md` (shipped) and `ROADMAP.md` (planned); for how the system works now see `docs/ARCHITECTURE.md` and `docs/DOMAIN.md`. Do not treat anything below as current.
+
 # OpenIbex Page Inventory
 
 This inventory reflects the authenticated routes present during Milestone 8. It is intended to guide Milestones 9 and 10 without changing routes or business logic.
