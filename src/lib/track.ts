@@ -11,7 +11,8 @@ export type XY = { x: number; y: number };
 // Defined here (not in a `$lib/server` module) so client components can import
 // the type without pulling in server-only code.
 export type TrackPoint = {
-	t: number;
+	t: number; // elapsed (wall-clock) seconds from start
+	tMoving: number; // moving (timer) seconds from start — paused time excluded
 	lat: number | null;
 	lng: number | null;
 	hr: number | null;
@@ -142,4 +143,24 @@ export function nearestIndex(pts: XY[], x: number, y: number): number {
 		}
 	}
 	return best;
+}
+
+/**
+ * Indices to draw on a moving-time axis: keep the first point and every point
+ * whose `tMoving` strictly advances. A run of equal `tMoving` is a paused range
+ * (the timer stalls while recording continues, or recording stops over a pause) —
+ * dropping the stalled samples collapses the pause to a point, the Strava /
+ * intervals.icu look, so the line never stalls or slants across a stop.
+ */
+export function movingTimeIndices(pts: Array<{ tMoving: number }>): number[] {
+	const out: number[] = [];
+	let last = -Infinity;
+	for (let i = 0; i < pts.length; i++) {
+		const tm = pts[i]!.tMoving;
+		if (i === 0 || tm > last) {
+			out.push(i);
+			last = tm;
+		}
+	}
+	return out;
 }

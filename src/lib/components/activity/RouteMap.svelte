@@ -176,7 +176,7 @@
 		applySize(baseCanvas, baseCtx);
 		baseCtx.clearRect(0, 0, W, H);
 		if (screen.length < 2) return;
-		baseCtx.lineWidth = 2.4;
+		baseCtx.lineWidth = 2.8;
 		baseCtx.lineCap = 'round';
 		baseCtx.lineJoin = 'round';
 		for (let i = 1; i < screen.length; i++) {

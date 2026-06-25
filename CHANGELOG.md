@@ -24,7 +24,9 @@ capability and the patch version for fixes; breaking changes may land in a minor
   (lat/lng + HR/pace/power/elevation) is shared by the map and charts and capped at 1800 samples by
   even time sampling (typical activities keep every point), an **elevation profile** sits below the
   HR/pace chart, and a single shared hovered-point store **brushes** the map and both charts in
-  either direction. Indoor activities show a tidy "No GPS data" state.
+  either direction. The HR/pace chart has a **moving ⟷ elapsed** time toggle (default moving): moving
+  excludes paused time for a clean Strava/intervals-style line, elapsed plots wall-clock and marks
+  paused stretches as shaded gap bands. Indoor activities show a tidy "No GPS data" state.
 - **Continuous integration** (GitHub Actions) — typecheck (`pnpm check`), test, and build; a
   changelog-touched gate on PRs; and a `docker compose` health smoke test against `/api/health`.
 - **Git pre-commit hook** — tracked in `.githooks/`, auto-wired via the `prepare` script; runs

@@ -284,8 +284,14 @@ export async function getActivityDetail(input: {
 		const elevation = asFiniteNumber(r['enhanced_altitude'] ?? r['altitude']);
 		if (elevation !== null) elevSeen = true;
 		const pace = speed !== null ? (speed > 0.2 ? Math.min(PACE_CAP, 1000 / speed) : PACE_CAP) : null;
+		// Elapsed (wall-clock) vs moving (timer) seconds from start. timer_time is
+		// authoritative moving time (present on every record from our parser); it
+		// holds across pauses, so the chart can plot a clean moving-time axis.
+		const tElapsed = ts ? Math.max(0, (ts.getTime() - startMs) / 1000) : rawPoints.length;
+		const timerTime = asFiniteNumber(r['timer_time']);
 		rawPoints.push({
-			t: ts ? Math.max(0, (ts.getTime() - startMs) / 1000) : rawPoints.length,
+			t: tElapsed,
+			tMoving: timerTime ?? tElapsed,
 			lat: hasGps ? lat : null,
 			lng: hasGps ? lng : null,
 			hr,
@@ -310,7 +316,7 @@ export async function getActivityDetail(input: {
 	// activities fall under the cap and keep every Garmin sample; only very long
 	// ones thin out, still smooth. The ~268px canvas map is unaffected by the extra
 	// density (canvas draws any segment count for free).
-	const POINT_CAP = 1800;
+	const POINT_CAP = 2000;
 	let points: TrackPoint[];
 	let bounds: ActivityTrack['bounds'] = null;
 	if (gpsCount >= 2) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { douglasPeucker, nearestIndex, simplifyTrack, type XY } from '$lib/track';
+import { douglasPeucker, movingTimeIndices, nearestIndex, simplifyTrack, type XY } from '$lib/track';
 
 const p = (x: number, y: number): XY => ({ x, y });
 
@@ -56,6 +56,28 @@ describe('simplifyTrack', () => {
 			{ x: 0, y: 0, hr: 120 },
 			{ x: 2, y: 2, hr: 140 }
 		]);
+	});
+});
+
+describe('movingTimeIndices', () => {
+	const tm = (...vals: number[]) => vals.map((tMoving) => ({ tMoving }));
+
+	it('keeps every index when moving time strictly increases', () => {
+		expect(movingTimeIndices(tm(0, 1, 2, 3, 4))).toEqual([0, 1, 2, 3, 4]);
+	});
+
+	it('drops a paused range where the timer stalls', () => {
+		// timer holds at 3 across a pause (samples 4..6), then resumes.
+		expect(movingTimeIndices(tm(0, 1, 2, 3, 3, 3, 3, 4, 5))).toEqual([0, 1, 2, 3, 7, 8]);
+	});
+
+	it('always keeps the first index, even at a stall boundary', () => {
+		expect(movingTimeIndices(tm(10, 10, 11))).toEqual([0, 2]);
+	});
+
+	it('handles empty and single-point inputs', () => {
+		expect(movingTimeIndices([])).toEqual([]);
+		expect(movingTimeIndices(tm(42))).toEqual([0]);
 	});
 });
 

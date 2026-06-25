@@ -7,25 +7,27 @@
 	export let units: Units;
 	export let hoverIndex: Writable<number | null>;
 
-	const W = 640;
 	const VIEW_H = 96;
 	const PAD_L = 6;
 	const PAD_T = 6;
 	const INNER_H = 70;
-	const INNER_W = W - 2 * PAD_L;
 	const BASE_Y = PAD_T + INNER_H;
+	// Measured width so 1 unit = 1 CSS px (no preserveAspectRatio="none" stretch).
+	let cw = 640;
+	$: innerW = Math.max(1, cw - 2 * PAD_L);
 
 	$: n = points.length;
 
-	// x-axis by cumulative distance when it's available and increasing (a climb
-	// reads more naturally against distance), else by elapsed time.
+	// x-axis by cumulative distance when available and increasing (a climb reads
+	// more naturally against distance, and paused/stationary time doesn't smear),
+	// else by elapsed time.
 	$: hasDistance = n > 1 && points[0]!.distance !== null && points[n - 1]!.distance !== null;
 	$: xKey = (p: TrackPoint): number => (hasDistance ? (p.distance ?? 0) : p.t);
 	$: xMin = n > 0 ? xKey(points[0]!) : 0;
 	$: xSpan = n > 0 ? xKey(points[n - 1]!) - xMin : 0;
 	$: xAt = (i: number): number => {
 		const frac = xSpan > 0 ? (xKey(points[i]!) - xMin) / xSpan : n > 1 ? i / (n - 1) : 0;
-		return PAD_L + frac * INNER_W;
+		return PAD_L + frac * innerW;
 	};
 
 	$: elevRange = (() => {
@@ -105,7 +107,7 @@
 		if (n === 0) return;
 		const target = e.currentTarget as SVGGraphicsElement;
 		const css = target.getBoundingClientRect().width || 1;
-		pendingX = (e.offsetX / css) * W;
+		pendingX = (e.offsetX / css) * cw;
 		if (rafPending) return;
 		rafPending = true;
 		requestAnimationFrame(() => {
@@ -118,10 +120,12 @@
 		const i = $hoverIndex;
 		if (i === null || i < 0 || i >= n) return null;
 		const p = points[i]!;
-		if (p.elevation === null) return { x: xAt(i), leftPct: `${((xAt(i) / W) * 100).toFixed(2)}%`, y: null, val: null };
+		const x = xAt(i);
+		const leftPct = `${((x / cw) * 100).toFixed(2)}%`;
+		if (p.elevation === null) return { x, leftPct, y: null, val: null };
 		return {
-			x: xAt(i),
-			leftPct: `${((xAt(i) / W) * 100).toFixed(2)}%`,
+			x,
+			leftPct,
 			y: elevY(p.elevation).toFixed(1),
 			val: `${elevationLabel(p.elevation, units)} ${elevationUnit(units)}`
 		};
@@ -133,12 +137,11 @@
 		<div class="card-title">Elevation</div>
 		<span class="elev-unit oi-mono">{elevationUnit(units)}</span>
 	</div>
-	<div class="chart-wrap">
+	<div class="chart-wrap" bind:clientWidth={cw}>
 		<svg
 			width="100%"
 			height={VIEW_H}
-			viewBox="0 0 {W} {VIEW_H}"
-			preserveAspectRatio="none"
+			viewBox="0 0 {cw} {VIEW_H}"
 			role="img"
 			aria-label="Elevation profile"
 			style="cursor: crosshair"
@@ -146,7 +149,7 @@
 			on:mouseleave={() => hoverIndex.set(null)}
 		>
 			{#each gridLines as g}
-				<line x1={PAD_L} y1={g.y} x2={W - PAD_L} y2={g.y} stroke="var(--grid)" stroke-width="1" />
+				<line x1={PAD_L} y1={g.y} x2={cw - PAD_L} y2={g.y} stroke="var(--grid)" stroke-width="1" />
 			{/each}
 			<path d={elevArea} fill="var(--ink2)" opacity="0.07" />
 			<path d={elevLine} fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linejoin="round" opacity="0.75" />
