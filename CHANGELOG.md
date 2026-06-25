@@ -34,6 +34,17 @@ capability and the patch version for fixes; breaking changes may land in a minor
 - **Claude Code commit guard** — a `PreToolUse` hook (`.claude/`) that blocks the agent from
   committing on `main` or with failing tests.
 
+### Fixed
+- **Dark mode on iOS/Safari PWA** — the status-bar / browser-chrome strip no longer stays light when
+  the theme is dark. The `<meta theme-color>` is now removed and re-appended on each theme change
+  (iOS Safari won't repaint the bar when an existing tag's `content` is mutated in place), and the
+  `<body>`/`<html>` background is painted to match the theme so the installed PWA's translucent
+  status-bar region (which shows the page behind it, ignoring theme-color) tracks light/dark.
+- **Touch scrubbing on the activity charts** — the HR/pace and elevation charts now follow a finger
+  dragged smoothly across them instead of only responding to discrete taps. They use Pointer Events
+  with `touch-action: pan-y` (vertical page scroll still works) and pointer capture, replacing the
+  mouse-only `mousemove` handler.
+
 ## [0.2.0] - 2026-06-24
 
 Live (experimental) Garmin Connect sync, a broad production-hardening pass, a full UI redesign, and the activities filtering workflow.
