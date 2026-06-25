@@ -27,24 +27,32 @@
 		{ href: '/settings', label: 'Settings', icon: 'settings' }
 	];
 
-	// Keep iOS Safari's URL bar / PWA chrome color in sync with the in-app
-	// theme store. The static <meta theme-color> tags in app.html cover
-	// prefers-color-scheme; this one (no `media`) wins when present.
-	let themeMeta: HTMLMetaElement | null = null;
+	// Keep the browser/PWA chrome color in sync with the in-app theme. Two
+	// surfaces need this and they don't share a mechanism:
+	//   1. Safari's URL bar (and Android Chrome) reads <meta theme-color>. iOS
+	//      Safari, however, frequently won't repaint the bar when an existing
+	//      tag's `content` is mutated in place — so we remove and re-append the
+	//      node on every change to force it to re-read.
+	//   2. The installed iOS PWA uses `black-translucent`, which ignores
+	//      theme-color and instead shows the page *behind* the status bar. The
+	//      <body> background was always the light token (the dark override lives
+	//      on .oi-root, a descendant), so that strip stayed light in dark mode.
+	//      Paint the body/html to match so the status-bar region tracks theme.
+	let mounted = false;
 	onMount(() => {
-		let existing = document.querySelector<HTMLMetaElement>(
-			'meta[name="theme-color"]:not([media])'
-		);
-		if (!existing) {
-			existing = document.createElement('meta');
-			existing.name = 'theme-color';
-			document.head.appendChild(existing);
-		}
-		themeMeta = existing;
+		mounted = true;
 	});
-	$: if (themeMeta) {
-		themeMeta.content = $theme === 'dark' ? '#0d1a15' : '#f4f2ec';
+	function syncChromeColor(t: 'light' | 'dark') {
+		const color = t === 'dark' ? '#0d1a15' : '#f4f2ec';
+		document.querySelectorAll('meta[name="theme-color"]:not([media])').forEach((m) => m.remove());
+		const meta = document.createElement('meta');
+		meta.name = 'theme-color';
+		meta.content = color;
+		document.head.appendChild(meta);
+		document.documentElement.style.backgroundColor = color;
+		document.body.style.backgroundColor = color;
 	}
+	$: if (mounted) syncChromeColor($theme);
 
 	$: pathname = $page.url.pathname;
 	$: displayName = user.displayName ?? user.email;

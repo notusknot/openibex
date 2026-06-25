@@ -103,17 +103,32 @@
 
 	let rafPending = false;
 	let pendingX = 0;
-	function onMove(e: MouseEvent) {
+	// Pointer events (not mousemove) so the crosshair tracks a finger dragged
+	// across the chart on touch, not just discrete taps. clientX − rect.left is
+	// used instead of offsetX because offsetX is unreliable under pointer capture.
+	function onMove(e: PointerEvent) {
 		if (n === 0) return;
 		const target = e.currentTarget as SVGGraphicsElement;
-		const css = target.getBoundingClientRect().width || 1;
-		pendingX = (e.offsetX / css) * cw;
+		const rect = target.getBoundingClientRect();
+		const css = rect.width || 1;
+		pendingX = ((e.clientX - rect.left) / css) * cw;
 		if (rafPending) return;
 		rafPending = true;
 		requestAnimationFrame(() => {
 			rafPending = false;
 			hoverIndex.set(nearestByX(pendingX));
 		});
+	}
+	function onDown(e: PointerEvent) {
+		// Capture so a horizontal scrub keeps delivering moves even if the finger
+		// drifts off the svg; the browser still pans vertically (touch-action: pan-y)
+		// and fires pointercancel, which releases us.
+		(e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+		onMove(e);
+	}
+	function onUp(e: PointerEvent) {
+		(e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+		hoverIndex.set(null);
 	}
 
 	$: hover = (() => {
@@ -144,9 +159,12 @@
 			viewBox="0 0 {cw} {VIEW_H}"
 			role="img"
 			aria-label="Elevation profile"
-			style="cursor: crosshair"
-			on:mousemove={onMove}
-			on:mouseleave={() => hoverIndex.set(null)}
+			style="cursor: crosshair; touch-action: pan-y"
+			on:pointermove={onMove}
+			on:pointerdown={onDown}
+			on:pointerup={onUp}
+			on:pointercancel={onUp}
+			on:pointerleave={() => hoverIndex.set(null)}
 		>
 			{#each gridLines as g}
 				<line x1={PAD_L} y1={g.y} x2={cw - PAD_L} y2={g.y} stroke="var(--grid)" stroke-width="1" />
