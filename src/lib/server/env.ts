@@ -28,6 +28,15 @@ export type OpenIbexEnv = {
 	SYNC_ENCRYPTION_KEY?: string;
 	// pino log level: fatal|error|warn|info|debug|trace|silent (default info).
 	LOG_LEVEL: string;
+	// Experimental calendar (ICS) subscription sync. All optional with sane
+	// defaults; tune only if a feed misbehaves. There is no background worker —
+	// polling is opportunistic on page loads, throttled per subscription.
+	CALENDAR_SYNC_THROTTLE_MS: number; // min gap between auto-polls of one feed
+	CALENDAR_SYNC_HORIZON_DAYS: number; // how far ahead to materialize events
+	CALENDAR_SYNC_PAST_GRACE_DAYS: number; // how far back to keep materializing
+	CALENDAR_MAX_FEED_BYTES: number; // reject feeds larger than this
+	CALENDAR_FETCH_TIMEOUT_MS: number; // abort a feed fetch after this long
+	CALENDAR_MAX_OCCURRENCES: number; // cap expanded occurrences per feed per poll
 };
 
 function readEnv(name: string): string | undefined {
@@ -51,6 +60,14 @@ export function getEnv(): OpenIbexEnv {
 	const validLogLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
 	const logLevelRaw = (readEnv('LOG_LEVEL') ?? 'info').toLowerCase();
 	const logLevel = validLogLevels.includes(logLevelRaw) ? logLevelRaw : 'info';
+	// Positive-number env with a default; a malformed value falls back rather than
+	// crashing boot (these knobs are non-critical tuning, unlike SESSION_TTL_DAYS).
+	const numEnv = (name: string, fallback: number): number => {
+		const raw = readEnv(name);
+		if (raw === undefined) return fallback;
+		const n = Number(raw);
+		return Number.isFinite(n) && n > 0 ? n : fallback;
+	};
 	return {
 		DATABASE_URL: readEnv('DATABASE_URL') ?? `file:${path.join(dataDir, 'openibex.db')}`,
 		OPENIBEX_DATA_DIR: dataDir,
@@ -65,7 +82,13 @@ export function getEnv(): OpenIbexEnv {
 		SESSION_TTL_DAYS: sessionTtlDays,
 		ORIGIN: readEnv('ORIGIN'),
 		SYNC_ENCRYPTION_KEY: readEnv('SYNC_ENCRYPTION_KEY'),
-		LOG_LEVEL: logLevel
+		LOG_LEVEL: logLevel,
+		CALENDAR_SYNC_THROTTLE_MS: numEnv('CALENDAR_SYNC_THROTTLE_MS', 15 * 60 * 1000),
+		CALENDAR_SYNC_HORIZON_DAYS: numEnv('CALENDAR_SYNC_HORIZON_DAYS', 60),
+		CALENDAR_SYNC_PAST_GRACE_DAYS: numEnv('CALENDAR_SYNC_PAST_GRACE_DAYS', 1),
+		CALENDAR_MAX_FEED_BYTES: numEnv('CALENDAR_MAX_FEED_BYTES', 5_000_000),
+		CALENDAR_FETCH_TIMEOUT_MS: numEnv('CALENDAR_FETCH_TIMEOUT_MS', 15_000),
+		CALENDAR_MAX_OCCURRENCES: numEnv('CALENDAR_MAX_OCCURRENCES', 500)
 	};
 }
 

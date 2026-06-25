@@ -392,3 +392,114 @@ export const syncJobs = sqliteTable('sync_jobs', {
 	consecutiveFailures: integer('consecutive_failures').notNull().default(0),
 	cooldownUntil: integer('cooldown_until', { mode: 'timestamp_ms' }) // breaker open until this time
 });
+
+export const calendarSyncStatuses = ['idle', 'running', 'failed'] as const;
+export type CalendarSyncStatus = (typeof calendarSyncStatuses)[number];
+
+// Experimental: a subscribed read-only ICS calendar feed (e.g. a coach-managed
+// public Google Calendar). Events become planned workouts. One row per feed.
+// Holds the conditional-fetch state (ETag / Last-Modified) AND a per-subscription
+// clone of the sync_jobs lock/throttle/circuit-breaker (a user may subscribe to
+// several feeds, each polled independently — so coordination can't live on the
+// per-user sync_jobs row). See calendarSubscriptionsRepository.
+//
+// SECURITY: `url` is sensitive — a Google ICS "secret address" embeds a private
+// token in its path. Never log it; errors reference the subscription, not the URL.
+export const calendarSubscriptions = sqliteTable(
+	'calendar_subscriptions',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		url: text('url').notNull(),
+		label: text('label').notNull(),
+		enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+		// conditional fetch — sent back as If-None-Match / If-Modified-Since
+		etag: text('etag'),
+		lastModified: text('last_modified'),
+		// coordination (mirrors sync_jobs): lock
+		status: text('status', { enum: calendarSyncStatuses }).notNull().default('idle'),
+		lockedAt: integer('locked_at', { mode: 'timestamp_ms' }),
+		lockedBy: text('locked_by'),
+		// throttle / last-run record
+		lastPolledAt: integer('last_polled_at', { mode: 'timestamp_ms' }),
+		lastStatus: text('last_status'),
+		lastError: text('last_error'), // redacted; never the feed URL
+		// circuit breaker
+		consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+		cooldownUntil: integer('cooldown_until', { mode: 'timestamp_ms' }),
+		lastEventCount: integer('last_event_count'),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(t) => ({
+		userUrlUnique: uniqueIndex('calendar_subscriptions_user_url_unique').on(t.userId, t.url),
+		userCreatedIdx: index('calendar_subscriptions_user_created_idx').on(t.userId, t.createdAt)
+	})
+);
+
+export const calendarSyncedWorkoutStates = [
+	'synced', // tracking the feed; auto-updates on upstream change
+	'user_modified', // the user edited it; we stop auto-overwriting
+	'conflict', // user edited AND upstream changed — needs review
+	'tombstoned', // user deleted it; never recreate
+	'cancelled' // removed/cancelled upstream but the user had customized it — kept + flagged
+] as const;
+export type CalendarSyncedWorkoutState = (typeof calendarSyncedWorkoutStates)[number];
+
+// One row per upstream event-instance we've materialized — the reconciliation
+// state that links an iCal UID (+ recurrence slot) to a planned workout.
+//
+// `syncedHash` is the hash of the mapped fields we LAST WROTE: comparing it to a
+// fresh hash of the current planned workout detects user edits, and to a hash of
+// the new feed event detects upstream changes — no hook into the edit UI needed.
+//
+// `plannedWorkoutId` is `set null` on delete: a surviving link row with a null
+// workout id means the user deleted it, which we treat as a durable tombstone
+// (never recreated, even though the event is still in the feed).
+export const calendarSyncedWorkouts = sqliteTable(
+	'calendar_synced_workouts',
+	{
+		id: text('id').primaryKey(),
+		subscriptionId: text('subscription_id')
+			.notNull()
+			.references(() => calendarSubscriptions.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		icalUid: text('ical_uid').notNull(),
+		// '' for non-recurring events, the RECURRENCE-ID slot for recurring ones —
+		// empty string (not NULL) so the unique index actually enforces uniqueness.
+		recurrenceId: text('recurrence_id').notNull().default(''),
+		plannedWorkoutId: text('planned_workout_id').references(() => plannedWorkouts.id, {
+			onDelete: 'set null'
+		}),
+		syncedHash: text('synced_hash').notNull(),
+		conflictHash: text('conflict_hash'),
+		upstreamSequence: integer('upstream_sequence'),
+		upstreamLastModified: text('upstream_last_modified'),
+		state: text('state', { enum: calendarSyncedWorkoutStates }).notNull().default('synced'),
+		conflictJson: text('conflict_json'),
+		removedUpstream: integer('removed_upstream', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(t) => ({
+		uidUnique: uniqueIndex('calendar_synced_workouts_uid_unique').on(
+			t.subscriptionId,
+			t.icalUid,
+			t.recurrenceId
+		),
+		userStateIdx: index('calendar_synced_workouts_user_state_idx').on(t.userId, t.state),
+		plannedIdx: index('calendar_synced_workouts_planned_idx').on(t.plannedWorkoutId)
+	})
+);
