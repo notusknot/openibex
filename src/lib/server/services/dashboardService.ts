@@ -9,6 +9,7 @@ import {
 import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
 import { SPORT_DISPLAY } from '$lib/server/sport';
+import { HR_ZONE_COLORS, HR_ZONE_NAMES } from '$lib/zones';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -394,13 +395,13 @@ export async function getDashboardData(
 	// Time-in-zone and power profile require per-activity HR/power stream parsing,
 	// which the backend does not currently expose. Placeholders match the design's
 	// shape; replace with real aggregations once stream analysis lands.
-	const zones: DashboardZone[] = [
-		{ name: 'Z1 · Recovery', pct: 27, w: '27%', color: '#9fc2a8' },
-		{ name: 'Z2 · Endurance', pct: 42, w: '42%', color: '#3c7a53' },
-		{ name: 'Z3 · Tempo', pct: 16, w: '16%', color: '#d2a03a' },
-		{ name: 'Z4 · Threshold', pct: 10, w: '10%', color: '#c0892e' },
-		{ name: 'Z5 · VO₂', pct: 5, w: '5%', color: '#9a4b2e' }
-	];
+	const zonePcts = [27, 42, 16, 10, 5];
+	const zones: DashboardZone[] = zonePcts.map((pct, i) => ({
+		name: HR_ZONE_NAMES[i]!,
+		pct,
+		w: `${pct}%`,
+		color: HR_ZONE_COLORS[i]!
+	}));
 	const power: DashboardPower[] = [
 		{ label: '5 s', val: 1180 },
 		{ label: '1 min', val: 640 },

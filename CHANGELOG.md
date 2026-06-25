@@ -15,6 +15,18 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **GPS route map on the activity page** — the track is rendered in-app on a `<canvas>` (no tiles,
+  no external calls, no map library), colored in short segments by intensity with a
+  HR / pace / power / HR-zone toggle (metrics the activity lacks are hidden). It draws on two
+  stacked canvas layers that stay crisp across devicePixelRatio / browser-zoom changes — the colored
+  track on a base layer redrawn only on data/metric/resize/theme changes, the hover marker on a
+  lightweight overlay — so brushing never re-renders the track. The per-point stream
+  (lat/lng + HR/pace/power/elevation) is shared by the map and charts and capped at 1800 samples by
+  even time sampling (typical activities keep every point), an **elevation profile** sits below the
+  HR/pace chart, and a single shared hovered-point store **brushes** the map and both charts in
+  either direction. The HR/pace chart has a **moving ⟷ elapsed** time toggle (default moving): moving
+  excludes paused time for a clean Strava/intervals-style line, elapsed plots wall-clock and marks
+  paused stretches as shaded gap bands. Indoor activities show a tidy "No GPS data" state.
 - **Continuous integration** (GitHub Actions) — typecheck (`pnpm check`), test, and build; a
   changelog-touched gate on PRs; and a `docker compose` health smoke test against `/api/health`.
 - **Git pre-commit hook** — tracked in `.githooks/`, auto-wired via the `prepare` script; runs

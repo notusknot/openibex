@@ -23,6 +23,7 @@
           ripgrep
           fd
           tree
+          sloc
 
           # JavaScript / TypeScript / SvelteKit
           nodejs_22
