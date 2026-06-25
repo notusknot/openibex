@@ -24,3 +24,4 @@ data/*.db-shm
 # runtime drops .pyc files alongside them).
 __pycache__/
 *.pyc
+.gstack/

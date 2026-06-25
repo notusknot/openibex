@@ -62,6 +62,7 @@
 		display: grid;
 		gap: 12px;
 		max-width: 560px;
+		margin-inline: auto;
 		padding: 16px;
 		border: 1px solid #e2e8f0;
 		border-radius: 12px;

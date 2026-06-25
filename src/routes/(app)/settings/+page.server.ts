@@ -14,7 +14,31 @@ import {
 import { GarminAuthError, GarminMfaUnsupportedError, login, redactGarminError } from '$lib/server/sync/garmin';
 import { sealJson } from '$lib/server/sync/crypto';
 import { isUserSyncing, syncForUser } from '$lib/server/services/sync/syncService';
+import {
+	getCalendarSyncSummaryForUser,
+	syncCalendarSubscriptionNow,
+	type CalendarSyncResult
+} from '$lib/server/services/sync/calendarSyncService';
+import {
+	createCalendarSubscription,
+	deleteCalendarSubscriptionForUser,
+	setCalendarSubscriptionEnabled
+} from '$lib/server/repositories/calendarSubscriptionsRepository';
+import { parseCalendarSubscriptionForm } from '$lib/validation/calendarSubscription';
 import { getLogger } from '$lib/server/logger';
+
+/** A short human notice for a calendar sync result, e.g. "3 added · 1 updated". */
+function calendarNotice(result: CalendarSyncResult): string {
+	if (result.outcome === 'not_modified') return 'Already up to date.';
+	const bits: string[] = [];
+	if (result.created) bits.push(`${result.created} added`);
+	if (result.updated) bits.push(`${result.updated} updated`);
+	if (result.conflicts) bits.push(`${result.conflicts} need review`);
+	if (result.removed) bits.push(`${result.removed} removed`);
+	if (result.cancelled) bits.push(`${result.cancelled} cancelled upstream`);
+	if (result.failed) bits.push(`${result.failed} skipped`);
+	return bits.length > 0 ? bits.join(' · ') : 'Already up to date.';
+}
 
 // Sanitized view of the Garmin credential for the page — never exposes the
 // encrypted token blob to the client.
@@ -36,7 +60,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		user: locals.user,
 		userPrefs: locals.userPrefs,
-		garmin: await loadGarminStatus(locals.user.id)
+		garmin: await loadGarminStatus(locals.user.id),
+		calendar: await getCalendarSyncSummaryForUser(locals.user.id)
 	};
 };
 
@@ -136,5 +161,74 @@ export const actions: Actions = {
 			return fail(400, { garminError: `Sync failed: ${result.error ?? 'unknown error'}` });
 		}
 		return { garminSync: { imported: result.imported, duplicate: result.duplicate, unsupported: result.unsupported, failed: result.failed } };
+	},
+
+	// ── Experimental calendar (ICS) subscriptions ────────────────────────────
+	addCalendar: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
+		const parsed = parseCalendarSubscriptionForm(form);
+		if (!parsed.ok) return fail(400, { calendarError: parsed.message });
+
+		const id = crypto.randomUUID();
+		try {
+			await createCalendarSubscription({ id, userId: locals.user.id, url: parsed.value.url, label: parsed.value.label });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : '';
+			if (/UNIQUE/i.test(msg)) return fail(400, { calendarError: 'You already subscribe to that feed.' });
+			getLogger().error({ detail: 'add calendar failed' }, 'calendar add failed');
+			return fail(400, { calendarError: 'Could not add that calendar.' });
+		}
+
+		// Pull it immediately so the user sees their workouts right away.
+		const result = await syncCalendarSubscriptionNow(id, locals.user.id);
+		if (!result) return { calendarNotice: 'Calendar added.' };
+		if (['unreachable', 'parse_error', 'error', 'rate_limited'].includes(result.outcome)) {
+			return { calendarNotice: 'Calendar added, but the first sync failed — double-check the URL. It will retry automatically.' };
+		}
+		return { calendarNotice: `Calendar added — ${calendarNotice(result)}` };
+	},
+
+	removeCalendar: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		// Cascades the sync link rows but leaves already-created planned workouts
+		// in place — unsubscribing stops syncing, it doesn't wipe your training.
+		await deleteCalendarSubscriptionForUser(id, locals.user.id);
+		return { calendarNotice: 'Calendar removed. Existing planned workouts were kept.' };
+	},
+
+	toggleCalendar: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const enabled = String(form.get('enabled') ?? '') === 'true';
+		await setCalendarSubscriptionEnabled(id, locals.user.id, enabled);
+		return { calendarNotice: enabled ? 'Calendar resumed.' : 'Calendar paused.' };
+	},
+
+	syncCalendar: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const result = await syncCalendarSubscriptionNow(id, locals.user.id);
+		if (!result) return fail(404, { calendarError: 'Calendar not found.' });
+		switch (result.outcome) {
+			case 'rate_limited':
+				return fail(429, { calendarError: 'The calendar host is rate-limiting — cooling down. Try again later.' });
+			case 'unreachable':
+				return fail(400, { calendarError: 'Could not reach the calendar feed. Check the URL.' });
+			case 'parse_error':
+				return fail(400, { calendarError: 'That feed could not be read as a calendar.' });
+			case 'error':
+				return fail(400, { calendarError: `Sync failed: ${result.error ?? 'unknown error'}` });
+			case 'skipped':
+				return fail(409, { calendarError: 'A sync is already running — try again shortly.' });
+			case 'disabled':
+				return fail(400, { calendarError: 'This calendar is paused. Resume it first.' });
+			default:
+				return { calendarNotice: calendarNotice(result) };
+		}
 	}
 };

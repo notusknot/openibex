@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { theme } from '$lib/stores/theme';
 
@@ -41,6 +42,17 @@
 	let mounted = false;
 	onMount(() => {
 		mounted = true;
+	});
+
+	// `.oi-main` is the scroll container (the root is fixed at 100vh), so
+	// SvelteKit's window-level scroll reset never reaches it — on a PWA you'd land
+	// at the previous page's scroll offset (e.g. the bottom of a workout dialog).
+	// Reset it to the top whenever the page (pathname) actually changes; leave it
+	// alone for same-page query/hash navigations (month paging, the skip link).
+	let mainEl: HTMLElement;
+	afterNavigate((nav) => {
+		if (nav.from && nav.to && nav.from.url.pathname === nav.to.url.pathname) return;
+		mainEl?.scrollTo(0, 0);
 	});
 	function syncChromeColor(t: 'light' | 'dark') {
 		const color = t === 'dark' ? '#0d1a15' : '#f4f2ec';
@@ -172,7 +184,7 @@
 		</div>
 	</aside>
 
-	<main class="oi-main" id="main" tabindex="-1">
+	<main class="oi-main" id="main" tabindex="-1" bind:this={mainEl}>
 		<slot />
 	</main>
 

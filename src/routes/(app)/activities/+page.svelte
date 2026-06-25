@@ -308,11 +308,6 @@
 		color: var(--muted);
 		margin: 5px 0 0;
 	}
-	.head-actions {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
 	/* The top-bar buttons (Export, Upload) share identical padding, font size,
 	   weight, line-height, radius so they line up at the same height instead of
 	   looking ragged. */
@@ -322,6 +317,7 @@
 		line-height: 1.2;
 		border-radius: 8px;
 		padding: 9px 13px;
+		margin: 0 0 0 8px;
 		color: var(--btn-ink);
 		background: var(--card);
 		border: 1px solid var(--line);

@@ -42,6 +42,13 @@
 	$: garminError = gform.garminError as string | undefined;
 	$: garminNotice = noticeFrom(gform);
 
+	// Calendar (ICS) subscriptions.
+	$: calendar = data.calendar;
+	$: calendarError = gform.calendarError as string | undefined;
+	$: calendarNotice = gform.calendarNotice as string | undefined;
+	let showAddCalendar = false;
+	let calendarBusy = false;
+
 	function noticeFrom(f: Record<string, any>): string | null {
 		if (f.garminSync) {
 			const s = f.garminSync;
@@ -396,6 +403,152 @@
 						</div>
 						<button type="button" class="btn-soft" disabled>Connect</button>
 					</div>
+				</div>
+			</section>
+
+			<section id="calendar" class="card">
+				<div class="card-title">
+					Calendar subscriptions <span class="soon-pill">Experimental</span>
+				</div>
+				<div class="card-eyebrow oi-mono">
+					Subscribe to a public ICS feed (e.g. a coach's team calendar). Events become planned
+					workouts, analyzed like any you create. Changes flow in within ~15 min of an update
+					(poll interval + the provider's export lag) — not real-time. Your own edits are never
+					silently overwritten.
+				</div>
+
+				{#if calendar.conflicts > 0}
+					<div class="form-error">
+						{calendar.conflicts} customized workout{calendar.conflicts === 1 ? '' : 's'} changed
+						upstream — open {calendar.conflicts === 1 ? 'it' : 'them'} from the
+						<a href="/calendar">calendar</a> to review.
+					</div>
+				{/if}
+
+				<div class="integration-list">
+					{#each calendar.subscriptions as sub (sub.id)}
+						<div class="integration-row">
+							<div class="integration-mark oi-mono" style="background: #6b4ea8">C</div>
+							<div class="integration-meta">
+								<div class="row-title">{sub.label}</div>
+								<div
+									class="row-help oi-mono"
+									class:warn={sub.state === 'failing' || sub.state === 'rate_limited'}
+								>
+									{sub.host}
+									{#if sub.state === 'syncing'}· syncing…
+									{:else if sub.state === 'rate_limited'}· rate-limited — cooling down
+									{:else if sub.state === 'failing'}· last sync failed{sub.lastError ? ` — ${sub.lastError}` : ''}
+									{:else if sub.state === 'disabled'}· paused
+									{:else if sub.lastPolledAt}· {sub.lastEventCount ?? 0} events · synced {formatRelative(sub.lastPolledAt)}
+									{:else}· not synced yet{/if}
+								</div>
+							</div>
+							<div class="integration-actions">
+								<form
+									method="POST"
+									action="?/syncCalendar"
+									use:enhance={() => {
+										calendarBusy = true;
+										return async ({ update }) => {
+											calendarBusy = false;
+											await update({ reset: false });
+										};
+									}}
+								>
+									<input type="hidden" name="id" value={sub.id} />
+									<button class="btn-soft" disabled={calendarBusy || !sub.enabled}>Sync now</button>
+								</form>
+								<form
+									method="POST"
+									action="?/toggleCalendar"
+									use:enhance={() => {
+										calendarBusy = true;
+										return async ({ update }) => {
+											calendarBusy = false;
+											await update({ reset: false });
+										};
+									}}
+								>
+									<input type="hidden" name="id" value={sub.id} />
+									<input type="hidden" name="enabled" value={sub.enabled ? 'false' : 'true'} />
+									<button class="btn-soft" disabled={calendarBusy}>{sub.enabled ? 'Pause' : 'Resume'}</button>
+								</form>
+								<form
+									method="POST"
+									action="?/removeCalendar"
+									use:enhance={() => {
+										calendarBusy = true;
+										return async ({ update }) => {
+											calendarBusy = false;
+											await update({ reset: false });
+										};
+									}}
+									on:submit={(e) => {
+										if (!confirm(`Remove "${sub.label}"? Synced workouts already on your calendar are kept.`))
+											e.preventDefault();
+									}}
+								>
+									<input type="hidden" name="id" value={sub.id} />
+									<button class="btn-soft danger" disabled={calendarBusy}>Remove</button>
+								</form>
+							</div>
+						</div>
+					{/each}
+
+					{#if calendar.subscriptions.length === 0}
+						<p class="row-help oi-mono" style="padding: 2px 0 6px">No calendars subscribed yet.</p>
+					{/if}
+
+					{#if showAddCalendar}
+						<form
+							class="garmin-connect"
+							method="POST"
+							action="?/addCalendar"
+							use:enhance={() => {
+								calendarBusy = true;
+								return async ({ result, update }) => {
+									calendarBusy = false;
+									if (result.type === 'success') showAddCalendar = false;
+									await update({ reset: false });
+								};
+							}}
+						>
+							<div class="field-grid two-col">
+								<label class="field">
+									<span class="field-label oi-mono">Feed URL (https / webcal)</span>
+									<input
+										class="oi-input"
+										type="text"
+										name="url"
+										placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+									/>
+								</label>
+								<label class="field">
+									<span class="field-label oi-mono">Label (optional)</span>
+									<input class="oi-input" type="text" name="label" placeholder="Team calendar" maxlength="120" />
+								</label>
+							</div>
+							<div class="garmin-foot">
+								<span class="row-help oi-mono">Read-only public feeds only — the URL is stored as a secret.</span>
+								<button class="btn btn-primary" disabled={calendarBusy}>
+									{calendarBusy ? 'Adding…' : 'Add calendar'}
+								</button>
+							</div>
+						</form>
+					{:else}
+						<div style="padding-top: 8px">
+							<button type="button" class="btn-soft" on:click={() => (showAddCalendar = true)}>
+								Add calendar
+							</button>
+						</div>
+					{/if}
+
+					{#if calendarError}
+						<div class="form-error">{calendarError}</div>
+					{:else if calendarNotice}
+						<div class="form-notice">{calendarNotice}</div>
+					{/if}
 				</div>
 			</section>
 

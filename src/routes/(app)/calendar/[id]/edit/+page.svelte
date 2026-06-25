@@ -1,10 +1,11 @@
 <script lang="ts">
 	import BackLink from '$lib/components/ui/BackLink.svelte';
-	import { formatPercent as pct } from '$lib/units';
+	import { formatPercent as pct, type Units } from '$lib/units';
 
 	type Sport = 'Bike' | 'Run' | 'Swim' | 'Strength' | 'Other';
 	export let data: {
 		sports: readonly Sport[];
+		units: Units;
 		workout: {
 			id: string;
 			sport: Sport;
@@ -23,10 +24,31 @@
 		} | null;
 		matchedActivity: { id: string; title: string; startTime: Date } | null;
 		candidates: Array<{ id: string; title: string; startTime: Date }>;
+		synced: {
+			label: string;
+			state: string;
+			removedUpstream: boolean;
+			conflict: {
+				sport: Sport;
+				scheduledDate: string;
+				title: string;
+				description: string | null;
+				plannedDurationSec: number | null;
+				plannedDistanceM: number | null;
+				plannedLoad: number | null;
+			} | null;
+		} | null;
 	};
 	export let form: { error?: string; success?: boolean } | null;
 
 	const w = data.workout;
+
+	function fmtDur(sec: number | null): string {
+		if (sec == null) return '—';
+		const h = Math.floor(sec / 3600);
+		const m = Math.round((sec % 3600) / 60);
+		return h > 0 ? `${h}h ${m}m` : `${m}m`;
+	}
 
 	const SPORT_COLOR: Record<Sport, string> = {
 		Bike: 'var(--bike)',
@@ -48,22 +70,21 @@
 	let title = w.title;
 	let description = w.description ?? '';
 
-	// ── Duration: friendly h/m/s, recombined into plannedDurationSec (seconds).
+	// ── Duration: hours + minutes, recombined into plannedDurationSec (seconds).
 	let durH: number | null = null;
 	let durM: number | null = null;
-	let durS: number | null = null;
 	if (w.plannedDurationSec != null) {
-		durH = Math.floor(w.plannedDurationSec / 3600);
-		durM = Math.floor((w.plannedDurationSec % 3600) / 60);
-		durS = w.plannedDurationSec % 60;
+		const totalMin = Math.round(w.plannedDurationSec / 60);
+		durH = Math.floor(totalMin / 60);
+		durM = totalMin % 60;
 	}
-	$: durationSet = durH !== null || durM !== null || durS !== null;
-	$: plannedDurationSec = durationSet
-		? String((durH ?? 0) * 3600 + (durM ?? 0) * 60 + (durS ?? 0))
-		: '';
+	$: durationSet = durH !== null || durM !== null;
+	$: plannedDurationSec = durationSet ? String((durH ?? 0) * 3600 + (durM ?? 0) * 60) : '';
 
 	// ── Distance: value + unit selector, recombined into plannedDistanceM (m).
-	let distUnit: 'km' | 'mi' | 'm' = w.sport === 'Swim' ? 'm' : 'km';
+	// Defaults to the user's preferred unit (swim stays in metres); m is always
+	// selectable.
+	let distUnit: 'km' | 'mi' | 'm' = w.sport === 'Swim' ? 'm' : data.units === 'metric' ? 'km' : 'mi';
 	let distValue: number | null =
 		w.plannedDistanceM != null ? round2(w.plannedDistanceM / UNIT_FACTOR[distUnit]) : null;
 	$: plannedDistanceM =
@@ -104,6 +125,24 @@
 	function fmtTime(d: Date) {
 		return new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 	}
+
+	// Grow the description with its content — a synced coach workout can be 30+
+	// lines or empty. CSS caps the height; beyond that it scrolls.
+	function autosize(node: HTMLTextAreaElement) {
+		const resize = () => {
+			node.style.height = 'auto';
+			node.style.height = `${node.scrollHeight}px`;
+		};
+		resize();
+		const raf = requestAnimationFrame(resize); // re-measure after layout settles
+		node.addEventListener('input', resize);
+		return {
+			destroy() {
+				cancelAnimationFrame(raf);
+				node.removeEventListener('input', resize);
+			}
+		};
+	}
 </script>
 
 <section class="edit">
@@ -122,102 +161,141 @@
 		<div class="banner banner-success">Saved.</div>
 	{/if}
 
+	{#if data.synced?.state === 'conflict' && data.synced.conflict}
+		<div class="card conflict">
+			<div>
+				<div class="card-title">Your coach updated this workout</div>
+				<p class="muted small">
+					You've customized this synced workout and <strong>{data.synced.label}</strong> changed it
+					upstream. Pick which version to keep — your edits are below in the form.
+				</p>
+			</div>
+			<div class="cf-grid">
+				<div class="cf"><span class="cf-cap oi-mono">Coach's title</span><span class="cf-val">{data.synced.conflict.title}</span></div>
+				<div class="cf"><span class="cf-cap oi-mono">Date</span><span class="cf-val">{data.synced.conflict.scheduledDate}</span></div>
+				<div class="cf"><span class="cf-cap oi-mono">Sport</span><span class="cf-val">{data.synced.conflict.sport}</span></div>
+				<div class="cf"><span class="cf-cap oi-mono">Duration</span><span class="cf-val">{fmtDur(data.synced.conflict.plannedDurationSec)}</span></div>
+				<div class="cf"><span class="cf-cap oi-mono">Load</span><span class="cf-val">{data.synced.conflict.plannedLoad ?? '—'}</span></div>
+			</div>
+			{#if data.synced.conflict.description}
+				<div class="cf">
+					<span class="cf-cap oi-mono">Coach's description</span>
+					<span class="cf-desc">{data.synced.conflict.description}</span>
+				</div>
+			{/if}
+			<div class="conflict-actions">
+				<form method="POST" action="?/applyCoachVersion">
+					<button type="submit" class="btn btn-primary">Apply coach's version</button>
+				</form>
+				<form method="POST" action="?/keepMine">
+					<button type="submit" class="btn">Keep mine</button>
+				</form>
+			</div>
+		</div>
+	{/if}
+
 	<form method="POST" action="?/update" class="card">
 		<!-- Hidden fields the backend parses; populated from the friendly controls. -->
 		<input type="hidden" name="sport" value={sport} />
 		<input type="hidden" name="plannedDurationSec" value={plannedDurationSec} />
 		<input type="hidden" name="plannedDistanceM" value={plannedDistanceM} />
 
-		<div class="field">
-			<span class="label oi-mono">Sport</span>
-			<div class="chips" role="radiogroup" aria-label="Sport">
-				{#each data.sports as s}
-					<button
-						type="button"
-						class="chip"
-						class:active={sport === s}
-						role="radio"
-						aria-checked={sport === s}
-						style="--chip: {SPORT_COLOR[s]}"
-						on:click={() => (sport = s)}
-					>
-						<span class="chip-dot" aria-hidden="true"></span>
-						{s}
-					</button>
-				{/each}
+		<div class="card-top">
+			<div class="field sport-field">
+				<span class="label oi-mono">Sport</span>
+				<div class="chips" role="radiogroup" aria-label="Sport">
+					{#each data.sports as s}
+						<button
+							type="button"
+							class="chip"
+							class:active={sport === s}
+							role="radio"
+							aria-checked={sport === s}
+							style="--chip: {SPORT_COLOR[s]}"
+							on:click={() => (sport = s)}
+						>
+							<span class="chip-dot" aria-hidden="true"></span>
+							{s}
+						</button>
+					{/each}
+				</div>
 			</div>
+
+			{#if data.synced && data.synced.state !== 'conflict'}
+				<div
+					class="sync-chip"
+					class:warn={data.synced.removedUpstream}
+					class:paused={!data.synced.removedUpstream && data.synced.state === 'user_modified'}
+					title={data.synced.removedUpstream
+						? `Cancelled in ${data.synced.label} — your version is kept`
+						: data.synced.state === 'user_modified'
+							? `Synced from ${data.synced.label} — your edits are preserved`
+							: `Synced from ${data.synced.label} — auto-updates from the feed`}
+				>
+					<span class="sync-dot" aria-hidden="true"></span>
+					<span class="sync-chip-text">
+						<span class="sync-chip-name">{data.synced.label}</span>
+						<span class="sync-chip-sub oi-mono">
+							{#if data.synced.removedUpstream}cancelled upstream
+							{:else if data.synced.state === 'user_modified'}edits preserved
+							{:else}auto-updates{/if}
+						</span>
+					</span>
+				</div>
+			{/if}
 		</div>
 
-		<div class="grid2">
-			<label class="field">
+		<div class="metrics">
+			<label class="field f-title">
+				<span class="label oi-mono">Title <span class="counter">{title.length}/120</span></span>
+				<input type="text" name="title" bind:value={title} maxlength="120" required placeholder="Workout name" />
+			</label>
+			<label class="field f-date">
 				<span class="label oi-mono">Date</span>
 				<input type="date" bind:value={scheduledDate} name="scheduledDate" required />
 			</label>
-			<label class="field">
-				<span class="label oi-mono">Planned load <span class="hint">TSS</span></span>
-				<input
-					type="number"
-					name="plannedLoad"
-					bind:value={plannedLoad}
-					min="0"
-					step="1"
-					placeholder="e.g. 65"
-				/>
+			<div class="field f-dur">
+				<span class="label oi-mono">Duration</span>
+				<div class="dur">
+					<div class="dur-cell">
+						<input type="number" bind:value={durH} min="0" step="1" placeholder="0" aria-label="Hours" />
+						<span class="dur-unit oi-mono">h</span>
+					</div>
+					<div class="dur-cell">
+						<input type="number" bind:value={durM} min="0" max="59" step="1" placeholder="00" aria-label="Minutes" />
+						<span class="dur-unit oi-mono">m</span>
+					</div>
+				</div>
+			</div>
+			<div class="field f-dist">
+				<span class="label oi-mono">Distance</span>
+				<div class="dist">
+					<input type="number" bind:value={distValue} min="0" step="0.01" placeholder="0" aria-label="Distance" />
+					<select value={distUnit} on:change={onUnitChange} aria-label="Distance unit">
+						<option value="km">km</option>
+						<option value="mi">mi</option>
+						<option value="m">m</option>
+					</select>
+				</div>
+			</div>
+			<label class="field f-load">
+				<span class="label oi-mono">Load <span class="hint">TSS</span></span>
+				<input type="number" name="plannedLoad" bind:value={plannedLoad} min="0" step="1" placeholder="65" />
 			</label>
 		</div>
-
-		<label class="field">
-			<span class="label oi-mono">Title <span class="counter">{title.length}/120</span></span>
-			<input type="text" name="title" bind:value={title} maxlength="120" required placeholder="Workout name" />
-		</label>
+		{#if pacePreview}
+			<p class="preview oi-mono">≈ {pacePreview} at target</p>
+		{/if}
 
 		<label class="field">
 			<span class="label oi-mono">Description</span>
 			<textarea
+				use:autosize
 				bind:value={description}
 				name="description"
-				rows="4"
 				placeholder="Structure, intervals, intent, fueling…"
 			></textarea>
 		</label>
-
-		<div class="field">
-			<span class="label oi-mono">Targets</span>
-			<div class="targets">
-				<div class="target-block">
-					<span class="target-cap oi-mono">Duration</span>
-					<div class="dur">
-						<div class="dur-cell">
-							<input type="number" bind:value={durH} min="0" step="1" placeholder="0" aria-label="Hours" />
-							<span class="dur-unit oi-mono">h</span>
-						</div>
-						<div class="dur-cell">
-							<input type="number" bind:value={durM} min="0" max="59" step="1" placeholder="00" aria-label="Minutes" />
-							<span class="dur-unit oi-mono">m</span>
-						</div>
-						<div class="dur-cell">
-							<input type="number" bind:value={durS} min="0" max="59" step="1" placeholder="00" aria-label="Seconds" />
-							<span class="dur-unit oi-mono">s</span>
-						</div>
-					</div>
-				</div>
-
-				<div class="target-block">
-					<span class="target-cap oi-mono">Distance</span>
-					<div class="dist">
-						<input type="number" bind:value={distValue} min="0" step="0.01" placeholder="0" aria-label="Distance" />
-						<select value={distUnit} on:change={onUnitChange} aria-label="Distance unit">
-							<option value="km">km</option>
-							<option value="mi">mi</option>
-							<option value="m">m</option>
-						</select>
-					</div>
-				</div>
-			</div>
-			{#if pacePreview}
-				<p class="preview oi-mono">≈ {pacePreview} at target</p>
-			{/if}
-		</div>
 
 		<footer class="form-foot">
 			<a class="btn" href="/calendar">Cancel</a>
@@ -301,6 +379,7 @@
 		flex-direction: column;
 		gap: 13px;
 		max-width: 640px;
+		margin-inline: auto;
 	}
 
 	.head {
@@ -335,6 +414,92 @@
 		background: var(--run-soft);
 	}
 
+	.conflict {
+		border-color: var(--gold, #b8860b);
+		box-shadow: inset 0 0 0 1px var(--gold, #b8860b);
+		gap: 12px;
+	}
+	.cf-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
+	.cf {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		background: var(--bg-soft);
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 8px 11px;
+	}
+	.cf-cap {
+		font-size: 8.5px;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--faint);
+	}
+	.cf-val {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--ink2);
+	}
+	.cf-desc {
+		font-size: 12px;
+		color: var(--ink);
+		line-height: 1.5;
+		white-space: pre-wrap;
+	}
+	.conflict-actions {
+		display: flex;
+		gap: 9px;
+	}
+	.conflict-actions form {
+		margin: 0;
+	}
+	.sync-chip {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: 9px;
+		background: var(--bg-emphasis);
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		padding: 5px 13px 5px 11px;
+	}
+	.sync-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex: none;
+		background: var(--green);
+		box-shadow: 0 0 0 3px rgba(28, 93, 58, 0.15);
+	}
+	.sync-chip.paused .sync-dot {
+		background: var(--gold, #b8860b);
+		box-shadow: none;
+	}
+	.sync-chip.warn .sync-dot {
+		background: var(--danger);
+		box-shadow: none;
+	}
+	.sync-chip-text {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+	.sync-chip-name {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink2);
+	}
+	.sync-chip-sub {
+		font-size: 8.5px;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--faint);
+	}
+
 	.card {
 		background: var(--card);
 		border: 1px solid var(--line);
@@ -350,10 +515,23 @@
 		color: var(--ink2);
 	}
 
+	/* Sport selector on the left, the sync chip pinned top-right of the card. */
+	.card-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 14px;
+	}
+	.sport-field {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
 	.field {
 		display: flex;
 		flex-direction: column;
 		gap: 7px;
+		min-width: 0; /* grid/flex cells shrink rather than overflow the card */
 	}
 	.label {
 		font-size: 9px;
@@ -385,7 +563,19 @@
 		border-radius: 8px;
 		padding: 9px 11px;
 		width: 100%;
+		min-width: 0; /* let the native date picker shrink instead of overflowing */
 		box-sizing: border-box;
+	}
+	/* iOS Safari sizes input[type=date] from its value and ignores width, so it
+	   spills past the card. Reset its appearance + the value pseudo so it fits. */
+	input[type='date'] {
+		-webkit-appearance: none;
+		appearance: none;
+	}
+	input[type='date']::-webkit-date-and-time-value {
+		text-align: left;
+		margin: 0;
+		min-width: 0;
 	}
 	input:focus,
 	select:focus,
@@ -395,8 +585,14 @@
 		box-shadow: 0 0 0 3px var(--bg-emphasis);
 	}
 	textarea {
-		resize: vertical;
+		/* Auto-grows with content via use:autosize; CSS sets the floor + ceiling
+		   (a synced coach workout can be empty or 30+ lines). */
+		resize: none;
+		overflow-y: auto;
+		min-height: 84px;
+		max-height: 60vh;
 		line-height: 1.5;
+		white-space: pre-wrap;
 	}
 	/* Strip number spinners — the layout already labels the units. */
 	input[type='number']::-webkit-outer-spin-button,
@@ -409,10 +605,28 @@
 		appearance: textfield;
 	}
 
-	.grid2 {
+	/* Balanced 6-column grid: row 1 = title + date, row 2 = the three targets.
+	   Evenly sized — never a lopsided 4-and-2 wrap. */
+	.metrics {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 12px;
+		grid-template-columns: repeat(6, 1fr);
+		gap: 12px 14px;
+		align-items: end;
+	}
+	.f-title {
+		grid-column: span 3;
+	}
+	.f-date {
+		grid-column: span 3;
+	}
+	.f-dur {
+		grid-column: span 2;
+	}
+	.f-dist {
+		grid-column: span 2;
+	}
+	.f-load {
+		grid-column: span 2;
 	}
 
 	.chips {
@@ -421,8 +635,10 @@
 		gap: 7px;
 	}
 	.chip {
+		flex: 1 1 auto;
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 7px;
 		font: 600 12px 'Archivo', system-ui, sans-serif;
 		color: var(--btn-ink);
@@ -447,23 +663,9 @@
 		box-shadow: inset 0 0 0 1px var(--chip);
 	}
 
-	.targets {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 12px;
-	}
-	.target-block {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	.target-cap {
-		font-size: 10px;
-		color: var(--muted);
-	}
 	.dur {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: 1fr 1fr;
 		gap: 6px;
 	}
 	.dur-cell {
@@ -484,11 +686,11 @@
 	}
 	.dist {
 		display: grid;
-		grid-template-columns: 1fr 72px;
+		grid-template-columns: 1fr 52px;
 		gap: 6px;
 	}
 	.dist select {
-		padding: 9px 8px;
+		padding: 9px 6px;
 	}
 	.preview {
 		font-size: 11px;
@@ -624,9 +826,23 @@
 		.card {
 			padding: 15px 16px;
 		}
-		.grid2,
-		.targets {
-			grid-template-columns: 1fr;
+		/* Keep the 6-col grid: title/date/load full width, duration + distance
+		   share a line (they're just numbers, clearly labelled). */
+		.f-title,
+		.f-date,
+		.f-load {
+			grid-column: span 6;
+		}
+		.f-dur,
+		.f-dist {
+			grid-column: span 3;
+		}
+		/* Slimmer sync pill — drop the "auto-updates" subline on mobile. */
+		.sync-chip {
+			padding: 4px 10px;
+		}
+		.sync-chip-sub {
+			display: none;
 		}
 		.compliance {
 			grid-template-columns: repeat(3, 1fr);

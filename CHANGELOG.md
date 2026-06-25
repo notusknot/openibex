@@ -15,6 +15,23 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Calendar subscription sync (experimental)** — subscribe to a read-only public ICS feed (e.g. a
+  coach-managed team calendar) in Settings → Calendar subscriptions; its events become planned
+  workouts on your calendar, editable and deletable like any you create. Title/description/date/
+  duration are mapped, the sport is inferred from the text, and planned TSS reuses the existing
+  `fallbackLoadScore` heuristic (free-text interval structure is intentionally not parsed yet). Feeds
+  are polled opportunistically on page loads, **throttled per subscription** and coordinated through
+  the subscription row's own durable lock/throttle/circuit-breaker (the proven `sync_jobs` pattern,
+  per-feed) — with conditional fetches (`ETag` / `If-Modified-Since`) so an unchanged feed is a cheap
+  304, and an `https`-only **SSRF guard** (rejects loopback/private/link-local/metadata hosts,
+  re-checked per redirect) on the user-supplied URL. **Reconciliation** keeps untouched workouts
+  auto-updating from the feed while never silently clobbering your edits: an edited workout stops
+  auto-updating, and if the coach *also* changes it you get a **conflict** to review on the workout's
+  edit page (apply the coach's version or keep yours); a workout you delete stays deleted across
+  re-syncs (durable tombstone); and an event removed/cancelled upstream is deleted if untouched or
+  kept-and-flagged if you'd customized it. Recurring events (RRULE / RECURRENCE-ID / EXDATE) are
+  expanded within a bounded horizon, matching is by iCal UID, parsing is defensive (one malformed
+  event can't sink a sync), and each changed poll is logged as a batch on `/imports`.
 - **GPS route map on the activity page** — the track is rendered in-app on a `<canvas>` (no tiles,
   no external calls, no map library), colored in short segments by intensity with a
   HR / pace / power / HR-zone toggle (metrics the activity lacks are hidden). It draws on two
