@@ -52,6 +52,13 @@ capability and the patch version for fixes; breaking changes may land in a minor
   committing on `main` or with failing tests.
 
 ### Fixed
+- **Activity pages for GPS-less activities (pool swims, indoor trainer rides)** — these pages were
+  inert: the HR/pace chart rendered but couldn't be hovered or toggled between Moving/Elapsed, and
+  links changed the URL without navigating. The route map's `onMount` called `getContext` on its
+  canvas unconditionally, but that canvas only exists when the activity has GPS — so for a GPS-less
+  activity it threw on `undefined`, and an unhandled `onMount` throw aborts the whole page's
+  hydration (dead controls + broken client-side routing). `onMount` now bails when the canvases
+  aren't present.
 - **Dark mode on iOS/Safari PWA** — the status-bar / browser-chrome strip no longer stays light when
   the theme is dark. The `<meta theme-color>` is now removed and re-appended on each theme change
   (iOS Safari won't repaint the bar when an existing tag's `content` is mutated in place), and the
