@@ -552,37 +552,46 @@
 
 		<div class="card zones-card">
 			<div class="card-title">Time in zone</div>
-			<div class="zones-body">
-				{#each dashboard.zones as z}
-					<div>
-						<div class="zone-row">
-							<span class="zone-name">{z.name}</span>
-							<span class="oi-mono zone-pct">{z.pct}%</span>
+			{#if dashboard.zones.length > 0}
+				<div class="zones-body">
+					{#each dashboard.zones as z}
+						<div>
+							<div class="zone-row">
+								<span class="zone-name">{z.name}</span>
+								<span class="oi-mono zone-pct">{z.pct}%</span>
+							</div>
+							<div class="zone-track">
+								<div class="zone-fill" style="width: {z.w}; background: {z.color}"></div>
+							</div>
 						</div>
-						<div class="zone-track">
-							<div class="zone-fill" style="width: {z.w}; background: {z.color}"></div>
-						</div>
-					</div>
-				{/each}
-			</div>
+					{/each}
+				</div>
+			{:else}
+				<div class="card-empty">No heart-rate data in this period.</div>
+			{/if}
 		</div>
 
 		<div class="card power-card">
 			<div class="card-head-small">
 				<div class="card-title">Power profile</div>
-				<span class="oi-mono power-period">90 d · W</span>
+				<span class="oi-mono power-period">12 wk · W</span>
 			</div>
-			<div class="power-body">
-				{#each dashboard.power as p}
-					<div class="power-row">
-						<span class="oi-mono power-label">{p.label}</span>
-						<div class="power-track">
-							<div class="power-fill" style="width: {Math.round((p.val / Math.max(...dashboard.power.map((q) => q.val))) * 100)}%"></div>
+			{#if dashboard.power.length > 0}
+				{@const powerMax = Math.max(...dashboard.power.map((q) => q.val))}
+				<div class="power-body">
+					{#each dashboard.power as p}
+						<div class="power-row">
+							<span class="oi-mono power-label">{p.label}</span>
+							<div class="power-track">
+								<div class="power-fill" style="width: {powerMax > 0 ? Math.round((p.val / powerMax) * 100) : 0}%"></div>
+							</div>
+							<span class="oi-mono power-val">{p.val}</span>
 						</div>
-						<span class="oi-mono power-val">{p.val}</span>
-					</div>
-				{/each}
-			</div>
+					{/each}
+				</div>
+			{:else}
+				<div class="card-empty">No power data — connect a power meter to see your profile.</div>
+			{/if}
 		</div>
 	</div>
 
@@ -1072,6 +1081,17 @@
 		display: flex;
 		flex-direction: column;
 		padding: 13px 15px;
+	}
+	.card-empty {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		padding: 16px 8px;
+		font-size: 10.5px;
+		line-height: 1.4;
+		color: var(--muted);
 	}
 	.zones-body {
 		display: flex;

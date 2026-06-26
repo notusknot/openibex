@@ -1,15 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 
 import { resetDbForTests } from '$lib/server/db/client';
 import { registerWithEmailPassword } from '$lib/server/services/authService';
 import { createActivity } from '$lib/server/repositories/activitiesRepository';
 import {
+	streamRelativePath,
+	writeStreamBlob
+} from '$lib/server/services/fileStorageService';
+import {
 	buildKpiIndicators,
 	getDashboardData,
 	trackPct
 } from '$lib/server/services/dashboardService';
+
+async function writeStream(activityId: string, records: Array<Record<string, unknown>>) {
+	const gzipBytes = zlib.gzipSync(Buffer.from(JSON.stringify({ records })));
+	await writeStreamBlob({ activityId, gzipBytes });
+}
 
 function setTestEnv(dataDir: string) {
 	process.env.OPENIBEX_ENV = 'test';
@@ -162,5 +172,110 @@ describe('getDashboardData EWMA pipeline', () => {
 		const last = d.series[d.series.length - 1]!;
 		expect(Math.round(last.ctl)).toBe(1);
 		expect(Math.round(last.atl)).toBe(8);
+	});
+});
+
+describe('getDashboardData stream cards (time-in-zone + power)', () => {
+	let userId: string;
+	const NOW = new Date('2026-06-15T12:00:00');
+
+	beforeEach(async () => {
+		const dataDir = `/tmp/openibex-dashstream-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+		fs.mkdirSync(dataDir, { recursive: true });
+		setTestEnv(dataDir);
+		resetDbForTests();
+		const { user } = await registerWithEmailPassword({ email: 'a@example.com', password: 'password123' });
+		userId = user.id;
+	});
+
+	const prefs = { maxHrBpm: 200, ftpWatts: null } as never; // zone bounds 120/140/160/180
+
+	it('empty cards when no activity has a stream', async () => {
+		await createActivity({
+			id: 'noStream',
+			userId,
+			activityFileId: null,
+			sport: 'Run',
+			title: 'Manual run',
+			startTime: new Date('2026-06-15T08:00:00'),
+			loadScore: 40
+		});
+		const d = await getDashboardData(userId, { now: NOW, prefs });
+		expect(d.zones).toEqual([]);
+		expect(d.power).toEqual([]);
+	});
+
+	it('aggregates HR into zones as a percentage of total HR time', async () => {
+		// 600 samples @150 bpm (Z3 with maxRef 200) + 400 @130 bpm (Z2) → 60% Z3, 40% Z2.
+		const records = [
+			...Array.from({ length: 600 }, () => ({ heart_rate: 150 })),
+			...Array.from({ length: 400 }, () => ({ heart_rate: 130 }))
+		];
+		await createActivity({
+			id: 'hrAct',
+			userId,
+			activityFileId: null,
+			sport: 'Run',
+			title: 'Zone run',
+			startTime: new Date('2026-06-15T08:00:00'),
+			maxHr: 165,
+			streamPath: streamRelativePath('hrAct')
+		});
+		await writeStream('hrAct', records);
+
+		const d = await getDashboardData(userId, { now: NOW, prefs });
+		const pct = Object.fromEntries(d.zones.map((z) => [z.name.slice(0, 2), z.pct]));
+		expect(pct['Z2']).toBe(40);
+		expect(pct['Z3']).toBe(60);
+		expect(d.zones.reduce((a, z) => a + z.pct, 0)).toBe(100);
+		// No power records → power card stays empty.
+		expect(d.power).toEqual([]);
+	});
+
+	it('builds a power-duration curve with an estimated FTP when none configured', async () => {
+		// 1300 s of constant 200 W → best avg = 200 at every window; FTP ≈ 0.95×200.
+		const records = Array.from({ length: 1300 }, () => ({ heart_rate: 140, power: 200 }));
+		await createActivity({
+			id: 'powAct',
+			userId,
+			activityFileId: null,
+			sport: 'Bike',
+			title: 'Power ride',
+			startTime: new Date('2026-06-15T08:00:00'),
+			avgPowerW: 200,
+			maxHr: 150,
+			streamPath: streamRelativePath('powAct')
+		});
+		await writeStream('powAct', records);
+
+		const d = await getDashboardData(userId, { now: NOW, prefs });
+		const byLabel = Object.fromEntries(d.power.map((p) => [p.label, p.val]));
+		expect(byLabel['5 s']).toBe(200);
+		expect(byLabel['1 min']).toBe(200);
+		expect(byLabel['5 min']).toBe(200);
+		expect(byLabel['20 min']).toBe(200);
+		expect(byLabel['FTP']).toBe(190); // 0.95 × best-20min, no configured FTP
+	});
+
+	it('uses the configured FTP for the power card when set', async () => {
+		const records = Array.from({ length: 1300 }, () => ({ power: 200 }));
+		await createActivity({
+			id: 'powAct2',
+			userId,
+			activityFileId: null,
+			sport: 'Bike',
+			title: 'Power ride',
+			startTime: new Date('2026-06-15T08:00:00'),
+			avgPowerW: 200,
+			streamPath: streamRelativePath('powAct2')
+		});
+		await writeStream('powAct2', records);
+
+		const d = await getDashboardData(userId, {
+			now: NOW,
+			prefs: { maxHrBpm: 200, ftpWatts: 260 } as never
+		});
+		const byLabel = Object.fromEntries(d.power.map((p) => [p.label, p.val]));
+		expect(byLabel['FTP']).toBe(260);
 	});
 });

@@ -52,6 +52,15 @@ capability and the patch version for fixes; breaking changes may land in a minor
   committing on `main` or with failing tests.
 
 ### Fixed
+- **Dashboard "Time in zone" and "Power profile" cards now show real data** — both were hardcoded
+  placeholders. They are now aggregated from the per-activity HR/power streams over the dashboard's
+  84-day (12-week) window. *Time in zone* buckets every HR sample into Z1–Z5 as a percentage of total
+  HR time, using the athlete's configured max HR when set and each activity's own max otherwise.
+  *Power profile* is a mean-maximal curve — the best rolling-average watts at 5 s / 1 min / 5 min /
+  20 min plus FTP (the configured value, else ≈95% of the best 20 min). Both degrade gracefully:
+  athletes with no power meter see a clear "no power data" state instead of invented wattages, and an
+  HR-less period shows an empty zone card rather than fake percentages. (The streams are read on each
+  dashboard load; aggregation is `O(samples)` per activity.)
 - **Activity pages for GPS-less activities (pool swims, indoor trainer rides)** — these pages were
   inert: the HR/pace chart rendered but couldn't be hovered or toggled between Moving/Elapsed, and
   links changed the URL without navigating. The route map's `onMount` called `getContext` on its

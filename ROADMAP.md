@@ -71,3 +71,11 @@ Not committed work — candidates for the lists above, included for discussion.
 - **Structured workout builder + execution view** — `planned_workouts.structure_json` already
   exists; author interval structure and compare planned-vs-actual per interval.
 - **Activity comparison** — overlay two activities (pace / power / HR) side by side.
+
+### Fixes
+
+ - Fix docker compose up one-time deploy on new system
+ - Fix time in zone and power meter on dashboard
+ - Improve nav performance
+ - Improve planned workout UI
+ 
