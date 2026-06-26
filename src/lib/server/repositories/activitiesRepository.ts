@@ -1,10 +1,14 @@
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
-import { activities, activityFiles, type Sport } from '$lib/server/db/schema';
+import { activities, activityFiles, activityStreamMetrics, type Sport } from '$lib/server/db/schema';
 import {
 	activityFileValues,
 	type CreateActivityFileInput
 } from '$lib/server/repositories/activityFilesRepository';
+import {
+	streamMetricsValues,
+	type StreamMetricsRowInput
+} from '$lib/server/repositories/activityStreamMetricsRepository';
 
 export type DbActivity = typeof activities.$inferSelect;
 
@@ -90,11 +94,26 @@ export async function createActivity(input: CreateActivityInput): Promise<void> 
 export function commitActivityWithFile(input: {
 	file: CreateActivityFileInput;
 	activity: CreateActivityInput;
+	// Optional per-activity stream metrics, written in the SAME transaction so an
+	// activity is never visible without its precomputed metrics. `activityId` and
+	// `userId` are taken from the activity, so callers pass only the metric fields.
+	metrics?: Omit<StreamMetricsRowInput, 'activityId' | 'userId'> | null;
 }): void {
 	const db = getDb();
 	db.transaction((tx) => {
 		tx.insert(activityFiles).values(activityFileValues(input.file)).run();
 		tx.insert(activities).values(activityValues(input.activity)).run();
+		if (input.metrics) {
+			tx.insert(activityStreamMetrics)
+				.values(
+					streamMetricsValues({
+						activityId: input.activity.id,
+						userId: input.activity.userId,
+						...input.metrics
+					})
+				)
+				.run();
+		}
 	});
 }
 

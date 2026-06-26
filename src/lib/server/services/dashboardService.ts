@@ -7,7 +7,20 @@ import {
 	type ActivityListRow
 } from '$lib/server/services/activitiesListService';
 import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
-import { addHrZoneSeconds, bestRollingAverage } from '$lib/server/services/analytics/streamAggregates';
+import {
+	STREAM_METRICS_VERSION,
+	addHistogramZoneSeconds,
+	computeActivityStreamMetrics,
+	maxBpmInHistogram,
+	serializeStreamMetrics,
+	type ActivityStreamMetrics,
+	type HrHistogram,
+	type PowerCurve
+} from '$lib/server/services/analytics/streamAggregates';
+import {
+	getStreamMetricsForActivityIds,
+	upsertActivityStreamMetrics
+} from '$lib/server/repositories/activityStreamMetricsRepository';
 import { readStreamBlob } from '$lib/server/services/fileStorageService';
 import type { Sport } from '$lib/server/db/schema';
 import { SPORT_DISPLAY } from '$lib/server/sport';
@@ -262,14 +275,8 @@ export function buildKpiIndicators(args: {
 	return { fitness, fatigue, form, weekTss: weekTssInd, readiness, monotony };
 }
 
-function asFiniteNumber(v: unknown): number | null {
-	if (v === null || v === undefined) return null;
-	const n = typeof v === 'number' ? v : Number(v);
-	return Number.isFinite(n) ? n : null;
-}
-
-// Mean-maximal power-curve points, in seconds. FIT records are ~1 Hz, so a
-// duration in seconds maps to that many consecutive samples.
+// Power-profile card points (mean-maximal watts), in seconds. Each maps to a key
+// in the stored power curve (see POWER_CURVE_DURATIONS).
 const POWER_TARGETS: { label: string; sec: number }[] = [
 	{ label: '5 s', sec: 5 },
 	{ label: '1 min', sec: 60 },
@@ -278,62 +285,89 @@ const POWER_TARGETS: { label: string; sec: number }[] = [
 ];
 const BEST_20MIN_SEC = 1200;
 
-// Build the real "Time in zone" and "Power profile" cards from per-activity HR
-// and power streams (the only place those per-second samples live — the
-// activities table stores aggregates only). Reads each stream blob once and
-// aggregates across the window:
-//   • zones  — HR seconds bucketed into Z1–Z5 as a % of total HR time. Uses the
-//     athlete's configured max HR when set, else each activity's own max as the
-//     reference. Empty when no activity in the window recorded HR.
-//   • power  — the best rolling-average watts at 5 s / 1 min / 5 min / 20 min
-//     plus FTP (configured, else ≈95% of the best 20 min). Empty for athletes
-//     with no power meter, so the card shows an unavailable state instead of
-//     invented numbers.
+// Resolve each in-window activity's precomputed stream metrics, lazily
+// self-healing rows that are missing or computed by an older algorithm version:
+// read that one stream, recompute, persist, and use the fresh value. So the
+// dashboard works on a fresh clone (before the backfill CLI runs) and auto-heals
+// across version bumps, while the steady state does ZERO stream reads.
+async function resolveStreamMetrics(
+	activities: DbActivity[]
+): Promise<Map<string, ActivityStreamMetrics>> {
+	const withStreams = activities.filter((a) => a.streamPath);
+	const rows = await getStreamMetricsForActivityIds(withStreams.map((a) => a.id));
+	const byId = new Map(rows.map((r) => [r.activityId, r]));
+
+	const out = new Map<string, ActivityStreamMetrics>();
+	const stale: DbActivity[] = [];
+	for (const a of withStreams) {
+		const row = byId.get(a.id);
+		if (row && row.version === STREAM_METRICS_VERSION) {
+			out.set(a.id, {
+				version: row.version,
+				hrHistogram: row.hrHistogramJson ? (JSON.parse(row.hrHistogramJson) as HrHistogram) : null,
+				powerCurve: row.powerCurveJson ? (JSON.parse(row.powerCurveJson) as PowerCurve) : null
+			});
+		} else {
+			stale.push(a);
+		}
+	}
+
+	if (stale.length > 0) {
+		await Promise.all(
+			stale.map(async (a) => {
+				try {
+					const metrics = computeActivityStreamMetrics(await readStreamBlob(a.id));
+					out.set(a.id, metrics);
+					await upsertActivityStreamMetrics({
+						activityId: a.id,
+						userId: a.userId,
+						...serializeStreamMetrics(metrics)
+					});
+				} catch {
+					// A missing/corrupt stream just means this activity contributes nothing.
+				}
+			})
+		);
+	}
+
+	return out;
+}
+
+// Build the real "Time in zone" and "Power profile" cards by aggregating the
+// per-activity precomputed metrics across the window:
+//   • zones  — HR histograms re-bucketed into Z1–Z5 (per activity, against the
+//     athlete's configured max HR when set, else that activity's own max) and
+//     summed, shown as a % of total HR time. Empty when no activity recorded HR.
+//   • power  — max of each duration's mean-maximal watts across activities, at
+//     5 s / 1 min / 5 min / 20 min, plus FTP (configured, else ≈95% of the best
+//     20 min). Empty for athletes with no power meter, so the card shows an
+//     unavailable state instead of invented numbers.
 export async function computeStreamCards(
 	activities: DbActivity[],
 	prefs: UserPreferences | null
 ): Promise<{ zones: DashboardZone[]; power: DashboardPower[] }> {
-	const withStreams = activities.filter((a) => a.streamPath);
-	const blobs = await Promise.all(
-		withStreams.map(async (a) => {
-			try {
-				return { activity: a, stream: await readStreamBlob(a.id) };
-			} catch {
-				return { activity: a, stream: null };
-			}
-		})
-	);
+	const metricsById = await resolveStreamMetrics(activities);
 
 	const userMaxHr = prefs?.maxHrBpm && prefs.maxHrBpm > 100 ? prefs.maxHrBpm : null;
 	const zoneSeconds = [0, 0, 0, 0, 0];
 	const bestPower = new Map<number, number>(); // window seconds → best avg watts
 
-	for (const { activity, stream } of blobs) {
-		if (!stream || typeof stream !== 'object') continue;
-		const records = Array.isArray((stream as { records?: unknown }).records)
-			? ((stream as { records: Array<Record<string, unknown>> }).records)
-			: [];
-		if (records.length === 0) continue;
+	for (const a of activities) {
+		const m = metricsById.get(a.id);
+		if (!m) continue;
 
-		const hr: number[] = [];
-		const powerSamples: number[] = [];
-		for (const r of records) {
-			const h = asFiniteNumber(r['heart_rate'] ?? r['heartRate']);
-			if (h !== null && h > 0) hr.push(h);
-			const p = asFiniteNumber(r['power']);
-			if (p !== null && p >= 0) powerSamples.push(p);
-		}
-
-		if (hr.length > 0) {
-			const maxRef = userMaxHr ?? (activity.maxHr && activity.maxHr > 100 ? activity.maxHr : Math.max(...hr));
-			addHrZoneSeconds(zoneSeconds, hr, maxRef);
+		if (m.hrHistogram) {
+			const maxRef =
+				userMaxHr ??
+				(a.maxHr && a.maxHr > 100 ? a.maxHr : maxBpmInHistogram(m.hrHistogram));
+			addHistogramZoneSeconds(zoneSeconds, m.hrHistogram, maxRef);
 		}
 
 		// Only activities that actually recorded power contribute to the curve.
-		if (powerSamples.length > 0) {
+		if (m.powerCurve) {
 			for (const t of POWER_TARGETS) {
-				const best = bestRollingAverage(powerSamples, t.sec);
-				if (best === null) continue;
+				const best = m.powerCurve[String(t.sec)];
+				if (best === undefined) continue;
 				const prev = bestPower.get(t.sec);
 				if (prev === undefined || best > prev) bestPower.set(t.sec, best);
 			}

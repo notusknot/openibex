@@ -7,6 +7,10 @@ import { createImportJob } from '$lib/server/repositories/importJobsRepository';
 import { parseFit } from '$lib/server/parsers/fit/fitParser';
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
+import {
+	computeActivityStreamMetrics,
+	serializeStreamMetrics
+} from '$lib/server/services/analytics/streamAggregates';
 
 export class DuplicateUploadError extends Error {
 	readonly existingActivityFileId: string;
@@ -47,6 +51,7 @@ export async function importFitUpload(input: {
 	const parsed = await parseFit(input.bytes, input.originalFilename);
 	const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
 	const stream = await writeStreamBlob({ activityId, gzipBytes });
+	const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 
 	const title = composeSmartTitle({
 		metadataLookup: null,
@@ -86,7 +91,8 @@ export async function importFitUpload(input: {
 			calories: parsed.summary.calories,
 			streamPath: stream.relativePath,
 			parserVersion: parsed.parserVersion
-		}
+		},
+		metrics
 	});
 
 	// Job record for the import history (FK to activity_file is now satisfied).

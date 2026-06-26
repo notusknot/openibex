@@ -15,6 +15,11 @@ import {
 	getDashboardData,
 	trackPct
 } from '$lib/server/services/dashboardService';
+import {
+	getStreamMetricsForActivityIds,
+	upsertActivityStreamMetrics
+} from '$lib/server/repositories/activityStreamMetricsRepository';
+import { STREAM_METRICS_VERSION } from '$lib/server/services/analytics/streamAggregates';
 
 async function writeStream(activityId: string, records: Array<Record<string, unknown>>) {
 	const gzipBytes = zlib.gzipSync(Buffer.from(JSON.stringify({ records })));
@@ -277,5 +282,62 @@ describe('getDashboardData stream cards (time-in-zone + power)', () => {
 		});
 		const byLabel = Object.fromEntries(d.power.map((p) => [p.label, p.val]));
 		expect(byLabel['FTP']).toBe(260);
+	});
+
+	it('lazily precomputes and persists a metrics row on first load (self-heal)', async () => {
+		const records = Array.from({ length: 1000 }, () => ({ heart_rate: 150 }));
+		await createActivity({
+			id: 'healAct',
+			userId,
+			activityFileId: null,
+			sport: 'Run',
+			title: 'Heal run',
+			startTime: new Date('2026-06-15T08:00:00'),
+			streamPath: streamRelativePath('healAct')
+		});
+		await writeStream('healAct', records);
+
+		// No metrics row yet — the legacy/on-the-fly state.
+		expect(await getStreamMetricsForActivityIds(['healAct'])).toHaveLength(0);
+
+		const d = await getDashboardData(userId, { now: NOW, prefs });
+		expect(d.zones.find((z) => z.name.startsWith('Z3'))?.pct).toBe(100); // 150/200 = Z3
+
+		// The dashboard healed the row: it now exists at the current version.
+		const rows = await getStreamMetricsForActivityIds(['healAct']);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.version).toBe(STREAM_METRICS_VERSION);
+		expect(JSON.parse(rows[0]!.hrHistogramJson!)).toEqual({ '150': 1000 });
+	});
+
+	it('recomputes a stale-version metrics row instead of trusting it', async () => {
+		const records = Array.from({ length: 1000 }, () => ({ heart_rate: 150 })); // all Z3
+		await createActivity({
+			id: 'staleAct',
+			userId,
+			activityFileId: null,
+			sport: 'Run',
+			title: 'Stale run',
+			startTime: new Date('2026-06-15T08:00:00'),
+			streamPath: streamRelativePath('staleAct')
+		});
+		await writeStream('staleAct', records);
+
+		// Seed a stale row (older version) with a deliberately WRONG histogram (all Z1).
+		await upsertActivityStreamMetrics({
+			activityId: 'staleAct',
+			userId,
+			version: STREAM_METRICS_VERSION - 1,
+			hrHistogramJson: JSON.stringify({ '100': 1000 }),
+			powerCurveJson: null
+		});
+
+		const d = await getDashboardData(userId, { now: NOW, prefs });
+		// Reflects the real stream (Z3), not the stale row (Z1)...
+		expect(d.zones.find((z) => z.name.startsWith('Z3'))?.pct).toBe(100);
+		// ...and the row was upgraded to the current version + correct data.
+		const rows = await getStreamMetricsForActivityIds(['staleAct']);
+		expect(rows[0]?.version).toBe(STREAM_METRICS_VERSION);
+		expect(JSON.parse(rows[0]!.hrHistogramJson!)).toEqual({ '150': 1000 });
 	});
 });
