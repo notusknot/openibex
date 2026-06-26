@@ -52,6 +52,14 @@ capability and the patch version for fixes; breaking changes may land in a minor
   committing on `main` or with failing tests.
 
 ### Changed
+- **Fonts are self-hosted (Fontsource) instead of loaded from Google Fonts.** The Google Fonts
+  `<link>` + `preconnect`s in `app.html` are gone; Archivo and JetBrains Mono now ship from the
+  app's own origin via `@fontsource/*`, imported in the root layout. Only the **latin subset** and
+  the **weights actually used** (400/500/600/700) are bundled, served **woff2-first** with
+  `font-display: swap`, and the two highest-impact first-paint faces (Archivo 400 body + Archivo 600
+  UI) are **preloaded**. Removes a third-party request/dependency on every page load (better for
+  privacy and for the mobile-over-Tailscale path), at the cost of a few hundred KB of font files in
+  the build.
 - **Per-activity stream metrics are precomputed at import, not re-parsed on every page load.** The
   dashboard's time-in-zone + power-profile aggregation previously decompressed and parsed every
   in-window stream blob on each load (~240 ms of event-loop-blocking work for ~55 activities, and
