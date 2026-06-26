@@ -7,6 +7,21 @@ import {
 	type ActivityListRow
 } from '$lib/server/services/activitiesListService';
 import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
+import {
+	STREAM_METRICS_VERSION,
+	addHistogramZoneSeconds,
+	computeActivityStreamMetrics,
+	maxBpmInHistogram,
+	serializeStreamMetrics,
+	type ActivityStreamMetrics,
+	type HrHistogram,
+	type PowerCurve
+} from '$lib/server/services/analytics/streamAggregates';
+import {
+	getStreamMetricsForActivityIds,
+	upsertActivityStreamMetrics
+} from '$lib/server/repositories/activityStreamMetricsRepository';
+import { readStreamBlob } from '$lib/server/services/fileStorageService';
 import type { Sport } from '$lib/server/db/schema';
 import { SPORT_DISPLAY } from '$lib/server/sport';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES } from '$lib/zones';
@@ -260,6 +275,129 @@ export function buildKpiIndicators(args: {
 	return { fitness, fatigue, form, weekTss: weekTssInd, readiness, monotony };
 }
 
+// Power-profile card points (mean-maximal watts), in seconds. Each maps to a key
+// in the stored power curve (see POWER_CURVE_DURATIONS).
+const POWER_TARGETS: { label: string; sec: number }[] = [
+	{ label: '5 s', sec: 5 },
+	{ label: '1 min', sec: 60 },
+	{ label: '5 min', sec: 300 },
+	{ label: '20 min', sec: 1200 }
+];
+const BEST_20MIN_SEC = 1200;
+
+// Resolve each in-window activity's precomputed stream metrics, lazily
+// self-healing rows that are missing or computed by an older algorithm version:
+// read that one stream, recompute, persist, and use the fresh value. So the
+// dashboard works on a fresh clone (before the backfill CLI runs) and auto-heals
+// across version bumps, while the steady state does ZERO stream reads.
+async function resolveStreamMetrics(
+	activities: DbActivity[]
+): Promise<Map<string, ActivityStreamMetrics>> {
+	const withStreams = activities.filter((a) => a.streamPath);
+	const rows = await getStreamMetricsForActivityIds(withStreams.map((a) => a.id));
+	const byId = new Map(rows.map((r) => [r.activityId, r]));
+
+	const out = new Map<string, ActivityStreamMetrics>();
+	const stale: DbActivity[] = [];
+	for (const a of withStreams) {
+		const row = byId.get(a.id);
+		if (row && row.version === STREAM_METRICS_VERSION) {
+			out.set(a.id, {
+				version: row.version,
+				hrHistogram: row.hrHistogramJson ? (JSON.parse(row.hrHistogramJson) as HrHistogram) : null,
+				powerCurve: row.powerCurveJson ? (JSON.parse(row.powerCurveJson) as PowerCurve) : null
+			});
+		} else {
+			stale.push(a);
+		}
+	}
+
+	if (stale.length > 0) {
+		await Promise.all(
+			stale.map(async (a) => {
+				try {
+					const metrics = computeActivityStreamMetrics(await readStreamBlob(a.id));
+					out.set(a.id, metrics);
+					await upsertActivityStreamMetrics({
+						activityId: a.id,
+						userId: a.userId,
+						...serializeStreamMetrics(metrics)
+					});
+				} catch {
+					// A missing/corrupt stream just means this activity contributes nothing.
+				}
+			})
+		);
+	}
+
+	return out;
+}
+
+// Build the real "Time in zone" and "Power profile" cards by aggregating the
+// per-activity precomputed metrics across the window:
+//   • zones  — HR histograms re-bucketed into Z1–Z5 (per activity, against the
+//     athlete's configured max HR when set, else that activity's own max) and
+//     summed, shown as a % of total HR time. Empty when no activity recorded HR.
+//   • power  — max of each duration's mean-maximal watts across activities, at
+//     5 s / 1 min / 5 min / 20 min, plus FTP (configured, else ≈95% of the best
+//     20 min). Empty for athletes with no power meter, so the card shows an
+//     unavailable state instead of invented numbers.
+export async function computeStreamCards(
+	activities: DbActivity[],
+	prefs: UserPreferences | null
+): Promise<{ zones: DashboardZone[]; power: DashboardPower[] }> {
+	const metricsById = await resolveStreamMetrics(activities);
+
+	const userMaxHr = prefs?.maxHrBpm && prefs.maxHrBpm > 100 ? prefs.maxHrBpm : null;
+	const zoneSeconds = [0, 0, 0, 0, 0];
+	const bestPower = new Map<number, number>(); // window seconds → best avg watts
+
+	for (const a of activities) {
+		const m = metricsById.get(a.id);
+		if (!m) continue;
+
+		if (m.hrHistogram) {
+			const maxRef =
+				userMaxHr ??
+				(a.maxHr && a.maxHr > 100 ? a.maxHr : maxBpmInHistogram(m.hrHistogram));
+			addHistogramZoneSeconds(zoneSeconds, m.hrHistogram, maxRef);
+		}
+
+		// Only activities that actually recorded power contribute to the curve.
+		if (m.powerCurve) {
+			for (const t of POWER_TARGETS) {
+				const best = m.powerCurve[String(t.sec)];
+				if (best === undefined) continue;
+				const prev = bestPower.get(t.sec);
+				if (prev === undefined || best > prev) bestPower.set(t.sec, best);
+			}
+		}
+	}
+
+	const totalZoneSec = zoneSeconds.reduce((a, b) => a + b, 0);
+	const zones: DashboardZone[] =
+		totalZoneSec > 0
+			? zoneSeconds.map((sec, i) => {
+					const pct = Math.round((sec / totalZoneSec) * 100);
+					return { name: HR_ZONE_NAMES[i]!, pct, w: `${pct}%`, color: HR_ZONE_COLORS[i]! };
+				})
+			: [];
+
+	const power: DashboardPower[] = [];
+	for (const t of POWER_TARGETS) {
+		const v = bestPower.get(t.sec);
+		if (v !== undefined) power.push({ label: t.label, val: Math.round(v) });
+	}
+	if (power.length > 0) {
+		const configuredFtp = prefs?.ftpWatts && prefs.ftpWatts > 0 ? prefs.ftpWatts : null;
+		const best20 = bestPower.get(BEST_20MIN_SEC);
+		const ftp = configuredFtp ?? (best20 !== undefined ? Math.round(best20 * 0.95) : null);
+		if (ftp !== null) power.push({ label: 'FTP', val: Math.round(ftp) });
+	}
+
+	return { zones, power };
+}
+
 export async function getDashboardData(
 	userId: string,
 	opts: { now?: Date; days?: number; prefs?: UserPreferences | null } = {}
@@ -392,23 +530,10 @@ export async function getDashboardData(
 				}
 			: { swimPct: 0, bikePct: 0, runPct: 0 };
 
-	// Time-in-zone and power profile require per-activity HR/power stream parsing,
-	// which the backend does not currently expose. Placeholders match the design's
-	// shape; replace with real aggregations once stream analysis lands.
-	const zonePcts = [27, 42, 16, 10, 5];
-	const zones: DashboardZone[] = zonePcts.map((pct, i) => ({
-		name: HR_ZONE_NAMES[i]!,
-		pct,
-		w: `${pct}%`,
-		color: HR_ZONE_COLORS[i]!
-	}));
-	const power: DashboardPower[] = [
-		{ label: '5 s', val: 1180 },
-		{ label: '1 min', val: 640 },
-		{ label: '5 min', val: 388 },
-		{ label: '20 min', val: 312 },
-		{ label: 'FTP', val: 296 }
-	];
+	// Time-in-zone and power profile are aggregated from the per-activity HR/power
+	// streams over the same window. Both degrade gracefully: zones is empty when no
+	// activity recorded HR, power is empty when none recorded watts (no power meter).
+	const { zones, power } = await computeStreamCards(windowActivities, prefs);
 
 	return {
 		kpis,

@@ -102,8 +102,3 @@ Deliberately deferred until a one-user tool actually needs them.
   lint/format toolchain becomes worthwhile if the codebase grows or gains outside contributors.
 - **Activity-list virtualization** — client-side filtering over the full set is intentional; if
   histories grow large, add windowing rather than server pagination.
-
----
-
-For the original Wave-2/3 production-readiness backlog, see
-[docs/archive/production-readiness.md](docs/archive/production-readiness.md).

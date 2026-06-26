@@ -12,6 +12,10 @@ import { createImportItem, updateImportItem } from '$lib/server/repositories/imp
 import { getUserByEmail } from '$lib/server/repositories/usersRepository';
 import { writeStreamBlob } from '$lib/server/services/fileStorageService';
 import {
+	computeActivityStreamMetrics,
+	serializeStreamMetrics
+} from '$lib/server/services/analytics/streamAggregates';
+import {
 	discoverCandidateFiles,
 	expandZipsToTemp,
 	findGarminUploadedFilesRoot,
@@ -285,6 +289,7 @@ export async function importGarminHistoricalExport(input: {
 				const activityId = crypto.randomUUID();
 				const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
 				const stream = await writeStreamBlob({ activityId, gzipBytes });
+				const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 
 				// Atomic: the activity_file + activity rows commit together, so a
 				// crash can't leave an orphan file row. The stream blob (and the
@@ -324,7 +329,8 @@ export async function importGarminHistoricalExport(input: {
 						calories: parsed.summary.calories,
 						streamPath: stream.relativePath,
 						parserVersion: parsed.parserVersion
-					}
+					},
+					metrics
 				});
 
 				importedCount += 1;

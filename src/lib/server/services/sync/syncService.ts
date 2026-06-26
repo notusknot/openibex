@@ -26,6 +26,10 @@ import {
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
 import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
+import {
+	computeActivityStreamMetrics,
+	serializeStreamMetrics
+} from '$lib/server/services/analytics/streamAggregates';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 import { beginCriticalWork, endCriticalWork, isShuttingDown } from '$lib/server/shutdown';
 import { getLogger } from '$lib/server/logger';
@@ -343,6 +347,7 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 				const activityId = crypto.randomUUID();
 				const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
 				const stream = await writeStreamBlob({ activityId, gzipBytes });
+				const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 
 				// Atomic: the activity_file + activity rows commit together, so a
 				// crash mid-write can't leave an orphan file row. The FIT original
@@ -382,7 +387,8 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 						calories: parsed.summary.calories,
 						streamPath: stream.relativePath,
 						parserVersion: parsed.parserVersion
-					}
+					},
+					metrics
 				});
 
 				imported++;

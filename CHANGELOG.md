@@ -51,7 +51,29 @@ capability and the patch version for fixes; breaking changes may land in a minor
 - **Claude Code commit guard** — a `PreToolUse` hook (`.claude/`) that blocks the agent from
   committing on `main` or with failing tests.
 
+### Changed
+- **Per-activity stream metrics are precomputed at import, not re-parsed on every page load.** The
+  dashboard's time-in-zone + power-profile aggregation previously decompressed and parsed every
+  in-window stream blob on each load (~240 ms of event-loop-blocking work for ~55 activities, and
+  growing with training volume). Each activity's HR histogram (seconds per bpm) and mean-maximal
+  power curve are now computed once when the FIT records are already in memory at import and stored
+  in a new `activity_stream_metrics` table (versioned, `ON DELETE CASCADE`); the dashboard reads and
+  sums these in one indexed query — flat O(activities), no stream reads. The HR data is stored as a
+  histogram (not pre-bucketed zones) so changing your max HR re-buckets at read time with no
+  recompute, and the power curve keeps a richer duration set for a future power-duration chart. A
+  metrics row that's missing or from an older algorithm version is **lazily recomputed and persisted
+  on read**, so a fresh clone works before any backfill and auto-heals across version bumps. Backfill
+  existing activities with `pnpm metrics:rebuild --user you@example.com`.
+
 ### Fixed
+- **Dashboard "Time in zone" and "Power profile" cards now show real data** — both were hardcoded
+  placeholders. They are now aggregated from the per-activity HR/power streams over the dashboard's
+  84-day (12-week) window. *Time in zone* buckets every HR sample into Z1–Z5 as a percentage of total
+  HR time, using the athlete's configured max HR when set and each activity's own max otherwise.
+  *Power profile* is a mean-maximal curve — the best rolling-average watts at 5 s / 1 min / 5 min /
+  20 min plus FTP (the configured value, else ≈95% of the best 20 min). Both degrade gracefully:
+  athletes with no power meter see a clear "no power data" state instead of invented wattages, and an
+  HR-less period shows an empty zone card rather than fake percentages.
 - **Activity pages for GPS-less activities (pool swims, indoor trainer rides)** — these pages were
   inert: the HR/pace chart rendered but couldn't be hovered or toggled between Moving/Elapsed, and
   links changed the URL without navigating. The route map's `onMount` called `getContext` on its

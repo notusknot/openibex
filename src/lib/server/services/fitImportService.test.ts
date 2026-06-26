@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetDbForTests, getDb } from '$lib/server/db/client';
-import { activityFiles, activities, importJobs } from '$lib/server/db/schema';
+import { activityFiles, activities, activityStreamMetrics, importJobs } from '$lib/server/db/schema';
 import { registerWithEmailPassword } from '$lib/server/services/authService';
+import { STREAM_METRICS_VERSION } from '$lib/server/services/analytics/streamAggregates';
 
 // Local 7:30 AM — deterministic across server TZ since the Date constructor
 // uses local time. The service composes a smart title from this, so we expect
@@ -27,7 +28,13 @@ vi.mock('$lib/server/parsers/fit/fitParser', () => {
 				avgCadence: 85,
 				calories: 600
 			},
-			stream: { records: [{ t: 0 }], laps: [] },
+			stream: {
+				records: [
+					{ heart_rate: 150, power: 200 },
+					{ heart_rate: 150, power: 200 }
+				],
+				laps: []
+			},
 			parserVersion: 'mock'
 		})
 	};
@@ -78,6 +85,14 @@ describe('fitImportService', () => {
 		const jobs = db.select().from(importJobs).all();
 		expect(jobs.length).toBe(1);
 		expect(jobs[0]?.status).toBe('succeeded');
+
+		// Per-activity stream metrics are precomputed and committed atomically with
+		// the activity (so the dashboard never re-parses the stream).
+		const metrics = db.select().from(activityStreamMetrics).all();
+		expect(metrics.length).toBe(1);
+		expect(metrics[0]?.activityId).toBe(result.activityId);
+		expect(metrics[0]?.version).toBe(STREAM_METRICS_VERSION);
+		expect(JSON.parse(metrics[0]!.hrHistogramJson!)).toEqual({ '150': 2 });
 	});
 
 	it('duplicate upload detected by sha256', async () => {

@@ -28,6 +28,7 @@
     "db:studio": "drizzle-kit studio",
     "import:garmin": "tsx scripts/import-garmin.ts",
     "analytics:rebuild": "tsx scripts/rebuild-daily-metrics.ts",
+    "metrics:rebuild": "tsx scripts/rebuild-activity-metrics.ts",
     "titles:backfill": "tsx scripts/backfill-activity-titles.ts",
     "cleanup:ghosts": "tsx scripts/cleanup-ghost-activities.ts",
     "audit": "pnpm audit --prod",

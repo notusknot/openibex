@@ -181,6 +181,44 @@ export const activities = sqliteTable(
 	})
 );
 
+// Per-activity stream-derived analytics, computed ONCE at import from the
+// in-memory FIT records and read cheaply thereafter (the dashboard's
+// time-in-zone + power-profile cards, and future analytics views) instead of
+// re-parsing the multi-MB stream blob on every page load. One row per activity.
+//
+// Stored prefs-independently so they never go stale on a settings change:
+//   hrHistogramJson — seconds per integer bpm `{ "150": 600, ... }`. Re-bucketed
+//     into HR zones at READ time against the current max-HR reference, so
+//     changing maxHrBpm (or adopting a different zone model) needs no recompute.
+//   powerCurveJson  — mean-maximal watts per duration `{ "5": 800, "60": 410 }`
+//     over a canonical duration set; null when the activity recorded no power.
+//     Aggregated across activities by max() per duration.
+// `version` is the algorithm version: a row with version < the code's current
+// value is lazily recomputed on read (and the backfill CLI rebuilds in bulk).
+export const activityStreamMetrics = sqliteTable(
+	'activity_stream_metrics',
+	{
+		activityId: text('activity_id')
+			.primaryKey()
+			.references(() => activities.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		version: integer('version').notNull(),
+		hrHistogramJson: text('hr_histogram_json'),
+		powerCurveJson: text('power_curve_json'),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(t) => ({
+		userIdx: index('activity_stream_metrics_user_idx').on(t.userId)
+	})
+);
+
 export const importBatchStatuses = ['pending', 'processing', 'completed', 'failed'] as const;
 export type ImportBatchStatus = (typeof importBatchStatuses)[number];
 
