@@ -67,6 +67,40 @@ export class GarminNoFitError extends Error {
 	}
 }
 
+/** A single Garmin network call exceeded GARMIN_NETWORK_TIMEOUT_MS. */
+export class GarminTimeoutError extends Error {
+	constructor(label: string, ms: number) {
+		super(`Garmin request timed out after ${ms}ms (${label}).`);
+		this.name = 'GarminTimeoutError';
+	}
+}
+
+// Per-call network timeout. The unofficial garmin-connect library has no built-in
+// timeout, so a hung TCP read would otherwise block a sync run forever — never
+// releasing its lock or critical-work slot (those only free on the 10-min TTL).
+// We bound each call with a Promise.race timer. Note this doesn't abort the
+// underlying request (the library exposes no AbortSignal), but it lets the run
+// fail fast so the lock/slot are released; the orphaned socket is GC'd later.
+export const GARMIN_NETWORK_TIMEOUT_MS = 30_000;
+
+async function withTimeout<T>(
+	op: () => Promise<T>,
+	label: string,
+	ms: number = GARMIN_NETWORK_TIMEOUT_MS
+): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new GarminTimeoutError(label, ms)), ms);
+		// Don't keep the process alive just for this timer (e.g. during shutdown).
+		timer.unref?.();
+	});
+	try {
+		return await Promise.race([op(), timeout]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
 type GarminConnectCtor = typeof import('garmin-connect').GarminConnect;
 
 async function loadLib(): Promise<GarminConnectCtor> {
@@ -86,7 +120,7 @@ export async function login(email: string, password: string): Promise<GarminToke
 	const GarminConnect = await loadLib();
 	const gc = new GarminConnect({ username: email, password });
 	try {
-		await gc.login();
+		await withTimeout(() => gc.login(), 'login');
 		// exportToken is inside the try: if login "succeeded" but produced no
 		// tokens, that's still a login failure, not an unexpected error.
 		return gc.exportToken() as unknown as GarminTokens;
@@ -112,7 +146,7 @@ export const openGarminSession: OpenGarminSession = async (tokens) => {
 
 	return {
 		async listActivities(start, limit) {
-			const activities = await gc.getActivities(start, limit);
+			const activities = await withTimeout(() => gc.getActivities(start, limit), 'getActivities');
 			return activities.map((a) => ({
 				activityId: a.activityId,
 				startTimeMs: a.beginTimestamp,
@@ -138,7 +172,10 @@ async function downloadFitBytes(
 	const tmpDir = path.join(os.tmpdir(), `openibex-garmin-${activityId}-${crypto.randomBytes(4).toString('hex')}`);
 	await fs.mkdir(tmpDir, { recursive: true });
 	try {
-		await gc.downloadOriginalActivityData({ activityId }, tmpDir, 'zip');
+		await withTimeout(
+			() => gc.downloadOriginalActivityData({ activityId }, tmpDir, 'zip'),
+			'downloadOriginalActivityData'
+		);
 		const zipBytes = await fs.readFile(path.join(tmpDir, `${activityId}.zip`));
 		return await extractFirstFit(zipBytes, activityId);
 	} finally {

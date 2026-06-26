@@ -9,6 +9,13 @@ export async function getGarminCredentialForUser(userId: string): Promise<DbGarm
 	return db.select().from(garminCredentials).where(eq(garminCredentials.userId, userId)).get();
 }
 
+// Any one stored credential (or undefined). Used by the boot-time key check to
+// detect a missing/rotated SYNC_ENCRYPTION_KEY without scanning every row.
+export async function getAnyGarminCredential(): Promise<DbGarminCredential | undefined> {
+	const db = getDb();
+	return db.select().from(garminCredentials).limit(1).get();
+}
+
 // Connect / reconnect: store fresh session tokens. Resets sync status so a
 // reconnect after an auth failure starts clean. One row per user (unique).
 export async function saveGarminCredential(input: {

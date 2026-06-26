@@ -38,23 +38,21 @@ where `hours = durationSec / 3600`.
 
 ## Performance Management Chart: Fitness / Fatigue / Form
 
-`daily_load` = sum of per-activity load on that local calendar day. From the daily series we
-derive three values. **Two surfaces compute them two different ways — this is intentional and
-worth knowing:**
+`daily_load` = sum of per-activity load on that local calendar day. From the daily series the
+**dashboard (`/dashboard`, the cockpit)** derives three values via an **EWMA** over an 84-day
+window, seeded at 0:
 
-- **Dashboard (`/dashboard`, the cockpit)** uses an **EWMA** over an 84-day window, seeded at 0:
-  ```text
-  aC = 1 − e^(−1/42)      aA = 1 − e^(−1/7)
-  CTL (Fitness) += (daily_load − CTL) × aC     # 42-day time constant
-  ATL (Fatigue) += (daily_load − ATL) × aA     # 7-day  time constant
-  TSB (Form)     = CTL − ATL
-  ```
-- **Analytics page (`/analytics`, `/api/analytics`)** uses **simple trailing rolling averages**:
-  `Fitness = mean(daily_load, 42d)`, `Fatigue = mean(daily_load, 7d)`,
-  `Freshness = Fitness − Fatigue`.
+```text
+aC = 1 − e^(−1/42)      aA = 1 − e^(−1/7)
+CTL (Fitness) += (daily_load − CTL) × aC     # 42-day time constant
+ATL (Fatigue) += (daily_load − ATL) × aA     # 7-day  time constant
+TSB (Form)     = CTL − ATL
+```
 
-(The EWMA is the more responsive "today" reading; the rolling average is the smoother historical
-series. Don't assume a single global formula.)
+This is the single PMC path. (A separate `/analytics` page once computed a second, rolling-average
+variant from a `daily_metrics` cache; both were removed — the page was an unused remnant and the
+two-formula split was a needless source of "why don't the numbers match." If a smoothed historical
+series is wanted later, add it back deliberately, not as a parallel truth.)
 
 ### Derived dashboard signals (with the exact bands)
 
@@ -73,17 +71,14 @@ science. Current thresholds:
   `≥60 Fresh`, `≥42 Productive`, `≥26 Fatigued`, else `Overreached`. (Note: this readiness label
   is a *separate* scale from the Form/TSB bands above — don't conflate the two.)
 
-## Weekly aggregation & compliance
+## Compliance
 
-- **Weeks start Monday** (`weekStartIsoMonday`).
-- **Weekly totals**: sums of `durationSec`, `distanceM`, `elevationGainM`, and load over the week
-  (missing values count as 0).
-- **Compliance** is computed only for **linked** planned↔completed pairs (`workout_links`):
+- **Compliance** is computed per **linked** planned↔completed pair (`workout_links`), surfaced on
+  the activity detail and calendar views:
   ```text
   duration_compliance = completed_duration / planned_duration   (etc. for distance, load)
   ```
-  Weekly compliance aggregates by totals, not by averaging ratios:
-  `Σ(completed) / Σ(planned)`. If the planned total is 0 or missing, compliance shows as `—`.
+  If the planned value is 0 or missing, that compliance ratio shows as `—`.
 
 ## Deduplication guarantees (3 layers)
 

@@ -58,26 +58,34 @@ export const sessions = sqliteTable('sessions', {
 export const sports = ['Bike', 'Run', 'Swim', 'Strength', 'Other'] as const;
 export type Sport = (typeof sports)[number];
 
-export const plannedWorkouts = sqliteTable('planned_workouts', {
-	id: text('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => users.id, { onDelete: 'cascade' }),
-	sport: text('sport', { enum: sports }).notNull(),
-	scheduledDate: text('scheduled_date').notNull(), // local date YYYY-MM-DD
-	title: text('title').notNull(),
-	description: text('description'),
-	plannedDurationSec: integer('planned_duration_sec'),
-	plannedDistanceM: real('planned_distance_m'),
-	plannedLoad: real('planned_load'),
-	structureJson: text('structure_json'),
-	createdAt: integer('created_at', { mode: 'timestamp_ms' })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`),
-	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`)
-});
+export const plannedWorkouts = sqliteTable(
+	'planned_workouts',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		sport: text('sport', { enum: sports }).notNull(),
+		scheduledDate: text('scheduled_date').notNull(), // local date YYYY-MM-DD
+		title: text('title').notNull(),
+		description: text('description'),
+		plannedDurationSec: integer('planned_duration_sec'),
+		plannedDistanceM: real('planned_distance_m'),
+		plannedLoad: real('planned_load'),
+		structureJson: text('structure_json'),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(t) => ({
+		// Calendar (monthly) and analytics-range loaders filter by
+		// (userId, scheduledDate) range; index matches that query shape.
+		userScheduledDate: index('planned_workouts_user_scheduled_date').on(t.userId, t.scheduledDate)
+	})
+);
 
 export const fileTypes = ['fit'] as const;
 export type ActivityFileType = (typeof fileTypes)[number];
@@ -282,31 +290,6 @@ export const importItems = sqliteTable(
 	(t) => ({
 		batchIdx: index('import_items_batch_idx').on(t.batchId, t.createdAt),
 		userShaIdx: index('import_items_user_sha_idx').on(t.userId, t.sha256)
-	})
-);
-
-export const dailyMetrics = sqliteTable(
-	'daily_metrics',
-	{
-		id: text('id').primaryKey(),
-		userId: text('user_id')
-			.notNull()
-			.references(() => users.id, { onDelete: 'cascade' }),
-		date: text('date').notNull(), // YYYY-MM-DD local date
-		sport: text('sport', { enum: sports }), // null = all sports
-		durationSec: integer('duration_sec').notNull().default(0),
-		distanceM: real('distance_m').notNull().default(0),
-		elevationGainM: real('elevation_gain_m').notNull().default(0),
-		loadScore: real('load_score').notNull().default(0),
-		createdAt: integer('created_at', { mode: 'timestamp_ms' })
-			.notNull()
-			.default(sql`(unixepoch() * 1000)`),
-		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-			.notNull()
-			.default(sql`(unixepoch() * 1000)`)
-	},
-	(t) => ({
-		userDateUnique: uniqueIndex('daily_metrics_user_date_sport_unique').on(t.userId, t.date, t.sport)
 	})
 );
 

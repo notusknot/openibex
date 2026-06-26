@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { syncJobs } from '$lib/server/db/schema';
 
@@ -98,6 +98,30 @@ export function tryAcquireSyncJob(userId: string, opts: AcquireOptions = {}): bo
 	});
 }
 
+/**
+ * Heartbeat: refresh the lock's `lockedAt` so a long-running sync keeps its lock
+ * live past SYNC_LOCK_TTL_MS and a concurrent auto-sync can't start a second run
+ * for the same user. Renews ONLY IF this process still owns the lock (status
+ * 'running' AND lockedBy === INSTANCE_ID) — never steals back a lock another run
+ * has since reclaimed. Returns true iff the lock was actually renewed.
+ *
+ * NOTE: lockedBy is a per-process id, so this can't distinguish two runs in the
+ * SAME process. The atomic acquire + this heartbeat make that case unreachable
+ * in practice (an active run never goes stale), but a per-run lock token would
+ * be the fully robust guard. See report TODO.
+ */
+export function renewSyncJobLock(userId: string, now: number = Date.now()): boolean {
+	const db = getDb();
+	const res = db
+		.update(syncJobs)
+		.set({ lockedAt: new Date(now) })
+		.where(
+			and(eq(syncJobs.userId, userId), eq(syncJobs.status, 'running'), eq(syncJobs.lockedBy, INSTANCE_ID))
+		)
+		.run();
+	return res.changes > 0;
+}
+
 export type SyncJobRelease = {
 	ok: boolean;
 	/** The SyncOutcome string (ok | auth_failed | error | …). */
@@ -110,24 +134,30 @@ export type SyncJobRelease = {
  * failure it increments the failure count and opens an (escalating) cool-down. */
 export function releaseSyncJob(userId: string, result: SyncJobRelease, now: number = Date.now()): void {
 	const db = getDb();
-	const prev = db.select().from(syncJobs).where(eq(syncJobs.userId, userId)).get();
-	const consecutiveFailures = result.ok ? 0 : (prev?.consecutiveFailures ?? 0) + 1;
-	const cooldownUntil = result.ok
-		? null
-		: new Date(now + computeBackoffMs(consecutiveFailures, result.status));
-	db.update(syncJobs)
-		.set({
-			status: result.ok ? 'idle' : 'failed',
-			lockedAt: null,
-			lockedBy: null,
-			lastRunAt: new Date(now),
-			lastStatus: result.status,
-			lastError: result.error ?? null,
-			consecutiveFailures,
-			cooldownUntil
-		})
-		.where(eq(syncJobs.userId, userId))
-		.run();
+	// Read-decide-write in one transaction. Only release if this process still
+	// owns the lock: a run whose lock went stale and was reclaimed by a newer run
+	// must NOT clobber that newer run's lock or its breaker state.
+	db.transaction((tx) => {
+		const prev = tx.select().from(syncJobs).where(eq(syncJobs.userId, userId)).get();
+		if (!prev || prev.lockedBy !== INSTANCE_ID) return; // lost the lock; nothing to release
+		const consecutiveFailures = result.ok ? 0 : (prev.consecutiveFailures ?? 0) + 1;
+		const cooldownUntil = result.ok
+			? null
+			: new Date(now + computeBackoffMs(consecutiveFailures, result.status));
+		tx.update(syncJobs)
+			.set({
+				status: result.ok ? 'idle' : 'failed',
+				lockedAt: null,
+				lockedBy: null,
+				lastRunAt: new Date(now),
+				lastStatus: result.status,
+				lastError: result.error ?? null,
+				consecutiveFailures,
+				cooldownUntil
+			})
+			.where(and(eq(syncJobs.userId, userId), eq(syncJobs.lockedBy, INSTANCE_ID)))
+			.run();
+	});
 }
 
 /** True iff a sync is running AND its lock is still live (not stale). A stale

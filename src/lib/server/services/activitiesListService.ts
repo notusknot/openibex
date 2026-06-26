@@ -10,34 +10,26 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_COLOR_VAR, SPORT_DISPLAY, SPORT_TAG } from '$lib/server/sport';
+import { SPORT_DISPLAY } from '$lib/server/sport';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 import { distanceFromMeters, distanceUnit, type Units } from '$lib/units';
 
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
+// Slim, raw-fields-only row. Display labels (date, distance/duration/IF/HR
+// strings) and the search index are derived in the browser from these numbers
+// via `$lib/activities/format` + `$lib/sport`, so we don't ship redundant text
+// on every row — the /activities page loads the user's entire history.
 export type ActivityListRow = {
 	id: string;
-	sport: 'swim' | 'bike' | 'run' | 'other';
-	sportLabel: Sport;
-	tag: string;
-	color: string;
-	date: string; // "Mon 6/21"
-	startTimeMs: number; // epoch ms, for client-side date sorting
+	sport: 'swim' | 'bike' | 'run' | 'other'; // display bucket, for the sport chips
+	sportLabel: Sport; // real sport enum — drives sort + tag/color lookup client-side
 	title: string;
-	searchText: string; // lowercased title + description, for client-side search
+	description: string | null; // raw; client builds the search index from title + this
+	startTimeMs: number; // epoch ms, for client-side date sorting + the date label
 	distanceM: number; // raw; 0 if missing
-	distanceDisplay: number; // already converted to user units
-	distanceLabel: string; // "13.4" or "—"
-	distanceUnitLabel: string; // "km" or "mi"
 	durationSec: number; // 0 if missing
-	durationLabel: string; // "1:04" or "—"
 	tss: number;
 	intensityFactor: number | null; // 0..1+
-	ifLabel: string; // "0.84" or "—"
-	ifPctWidth: string; // CSS percent string
 	avgHr: number | null;
-	hrLabel: string; // "152" or "—"
 };
 
 export type ActivityListSummary = {
@@ -54,47 +46,19 @@ export type ActivitiesListData = {
 	totalCount: number; // total activities in DB for this user (for "Showing X of Y")
 };
 
-function formatDate(d: Date): string {
-	return `${DOW[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-function formatDuration(durationSec: number | null): string {
-	if (!durationSec || durationSec <= 0) return '—';
-	const total = Math.round(durationSec / 60);
-	const h = Math.floor(total / 60);
-	const m = total % 60;
-	return `${h}:${m.toString().padStart(2, '0')}`;
-}
-
-function shapeRow(a: DbActivity, prefs: ThresholdPrefs | null, units: Units): ActivityListRow {
-	const sport = SPORT_DISPLAY[a.sport];
-	const distM = a.distanceM ?? 0;
-	const distDisplay = distM > 0 ? distanceFromMeters(distM, units) : 0;
-	const durationSec = a.durationSec ?? 0;
-	const ifn = intensityFactorFor(a, prefs);
-	const tss = Math.round(loadFor(a, prefs));
+function shapeRow(a: DbActivity, prefs: ThresholdPrefs | null): ActivityListRow {
 	return {
 		id: a.id,
-		sport,
+		sport: SPORT_DISPLAY[a.sport],
 		sportLabel: a.sport,
-		tag: SPORT_TAG[a.sport],
-		color: SPORT_COLOR_VAR[a.sport],
-		date: formatDate(new Date(a.startTime)),
-		startTimeMs: new Date(a.startTime).getTime(),
 		title: a.title,
-		searchText: `${a.title} ${a.description ?? ''}`.toLowerCase(),
-		distanceM: distM,
-		distanceDisplay: distDisplay,
-		distanceLabel: distM > 0 ? distDisplay.toFixed(1) : '—',
-		distanceUnitLabel: distanceUnit(units),
-		durationSec,
-		durationLabel: formatDuration(a.durationSec),
-		tss,
-		intensityFactor: ifn,
-		ifLabel: ifn !== null ? ifn.toFixed(2) : '—',
-		ifPctWidth: `${Math.max(0, Math.min(120, Math.round((ifn ?? 0) * 100)))}%`,
-		avgHr: a.avgHr,
-		hrLabel: a.avgHr ? String(Math.round(a.avgHr)) : '—'
+		description: a.description ?? null,
+		startTimeMs: new Date(a.startTime).getTime(),
+		distanceM: a.distanceM ?? 0,
+		durationSec: a.durationSec ?? 0,
+		tss: Math.round(loadFor(a, prefs)),
+		intensityFactor: intensityFactorFor(a, prefs),
+		avgHr: a.avgHr ?? null
 	};
 }
 
@@ -127,7 +91,7 @@ export async function getActivitiesList(input: {
 		]);
 	}
 
-	const rows = activities.map((a) => shapeRow(a, prefs, units));
+	const rows = activities.map((a) => shapeRow(a, prefs));
 
 	const totalDistanceM = activities.reduce((acc, a) => acc + (a.distanceM ?? 0), 0);
 	const summary: ActivityListSummary = {
