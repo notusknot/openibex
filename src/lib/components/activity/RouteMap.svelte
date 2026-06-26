@@ -229,7 +229,12 @@
 	$: if (overlayCtx && overlayDeps) renderOverlay();
 
 	onMount(() => {
-		if (!browser) return;
+		// The canvases only exist in the `hasGps` branch; for a GPS-less activity
+		// (e.g. a pool swim or indoor trainer) `baseCanvas`/`overlayCanvas` are never
+		// bound. Bailing here avoids a `getContext` on `undefined` — an unhandled
+		// throw in onMount aborts the whole page's hydration, leaving the chart
+		// toggle, hover, and client-side navigation dead.
+		if (!browser || !baseCanvas || !overlayCanvas) return;
 		baseCtx = baseCanvas.getContext('2d');
 		overlayCtx = overlayCanvas.getContext('2d');
 		resolveColors();
