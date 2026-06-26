@@ -43,7 +43,7 @@ export function getDb() {
 	sqlite.pragma('cache_size = -16000'); // ~16MB page cache (negative value = KiB)
 	sqlite.pragma('temp_store = MEMORY'); // keep temp b-trees off disk
 	db = drizzle(sqlite, { schema });
-	ensureMigrations(db);
+	ensureMigrations(db, sqlite, sqlitePath);
 	return db;
 }
 

@@ -23,9 +23,14 @@ services:
       # pass the built-in CSRF check (compares request Origin header to this).
       # Override to https://your.domain when running behind a reverse proxy.
       - ORIGIN=${ORIGIN:-http://localhost:3000}
+      # The entrypoint chowns /data to this uid:gid and runs the app as it
+      # (default 1000). Set these in .env to match the host user that owns
+      # ./data if it isn't uid 1000 — no manual chown needed either way.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
-      # The container runs as uid 1000 (non-root); ensure ./data on the host is
-      # writable by uid 1000 (e.g. `chown -R 1000:1000 ./data`).
+      # All app data lives here. The entrypoint takes ownership automatically on
+      # startup (see PUID/PGID above), so no manual chown of ./data is required.
       - ./data:/data
     restart: unless-stopped
     # Let the graceful-shutdown handler drain in-flight writes + checkpoint the

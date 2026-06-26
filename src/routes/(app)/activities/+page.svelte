@@ -12,11 +12,37 @@
 		type SortDir,
 		type SortKey
 	} from '$lib/activities/filterSort';
+	import {
+		distanceFromMeters,
+		distanceLabel,
+		distanceUnit,
+		formatActivityDate,
+		formatDuration,
+		hrLabel,
+		ifLabel,
+		ifPctWidth
+	} from '$lib/activities/format';
+	import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/sport';
 
 	export let data: PageData;
 	$: list = data.activities;
+	$: units = data.units;
 
-	type Row = PageData['activities']['rows'][number];
+	// Rows arrive slim (raw numbers only). Enrich each once on load with the two
+	// derived fields the filter/sort engine reads — a lowercased search index and
+	// the distance in display units — so filterRows stays a tight numeric pass on
+	// every keystroke instead of re-deriving them each time.
+	type ViewRow = PageData['activities']['rows'][number] & {
+		searchText: string;
+		distanceDisplay: number;
+	};
+	$: rows = list.rows.map(
+		(r): ViewRow => ({
+			...r,
+			searchText: `${r.title} ${r.description ?? ''}`.toLowerCase(),
+			distanceDisplay: r.distanceM > 0 ? distanceFromMeters(r.distanceM, units) : 0
+		})
+	);
 
 	// ── Sport chips ──────────────────────────────────────────────────────
 	let filter: FilterKey = 'all';
@@ -82,8 +108,8 @@
 	const PAGE_SIZE = 50;
 	let renderLimit = PAGE_SIZE;
 
-	$: shown = filterRows<Row>(list.rows, filter, needle, ranges);
-	$: sorted = sortRows<Row>(shown, sortKey, sortDir);
+	$: shown = filterRows<ViewRow>(rows, filter, needle, ranges);
+	$: sorted = sortRows<ViewRow>(shown, sortKey, sortDir);
 	$: visible = sorted.slice(0, renderLimit);
 
 	// Snap the render window back to the top whenever the result set or its order
@@ -248,20 +274,27 @@
 		</div>
 		{#each visible as r}
 			<a class="row" href="/activities/{r.id}" title={r.title}>
-				<span class="cell-date oi-mono">{r.date}</span>
+				<span class="cell-date oi-mono">{formatActivityDate(r.startTimeMs)}</span>
 				<span class="cell-tag">
-					<span class="sport-tag oi-mono" style="background: {r.color}">{r.tag}</span>
+					<span class="sport-tag oi-mono" style="background: {SPORT_COLOR_VAR[r.sportLabel]}"
+						>{SPORT_TAG[r.sportLabel]}</span
+					>
 				</span>
 				<span class="cell-title">{r.title}</span>
-				<span class="cell-num oi-mono">{r.distanceLabel} {r.distanceUnitLabel}</span>
-				<span class="cell-num oi-mono">{r.durationLabel}</span>
+				<span class="cell-num oi-mono">{distanceLabel(r.distanceM, units)} {distanceUnit(units)}</span>
+				<span class="cell-num oi-mono">{formatDuration(r.durationSec)}</span>
 				<span class="cell-tss oi-mono">{r.tss}</span>
-				<span class="cell-num oi-mono">{r.ifLabel}</span>
+				<span class="cell-num oi-mono">{ifLabel(r.intensityFactor)}</span>
 				<span class="cell-ifbar">
 					<span class="ifbar-track">
-						<span class="ifbar-fill" style="width: {r.ifPctWidth}; background: {r.color}"></span>
+						<span
+							class="ifbar-fill"
+							style="width: {ifPctWidth(r.intensityFactor)}; background: {SPORT_COLOR_VAR[
+								r.sportLabel
+							]}"
+						></span>
 					</span>
-					<span class="cell-hr oi-mono">{r.hrLabel}</span>
+					<span class="cell-hr oi-mono">{hrLabel(r.avgHr)}</span>
 				</span>
 			</a>
 		{/each}

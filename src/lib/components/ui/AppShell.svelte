@@ -17,9 +17,6 @@
 
 	type TabIcon = 'dashboard' | 'calendar' | 'activities' | 'imports' | 'settings';
 
-	// Analytics is intentionally hidden from the nav for now — the route is
-	// still reachable by direct URL but the user hasn't committed to surfacing
-	// it yet. Re-add when ready.
 	const navItems: { href: string; label: string; showCount?: boolean; icon: TabIcon }[] = [
 		{ href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
 		{ href: '/calendar', label: 'Calendar', icon: 'calendar' },

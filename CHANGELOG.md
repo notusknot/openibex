@@ -72,8 +72,46 @@ capability and the patch version for fixes; breaking changes may land in a minor
   metrics row that's missing or from an older algorithm version is **lazily recomputed and persisted
   on read**, so a fresh clone works before any backfill and auto-heals across version bumps. Backfill
   existing activities with `pnpm metrics:rebuild --user you@example.com`.
+- **`/activities` ships a much smaller payload.** The page still loads the full activity set and
+  filters/sorts/paginates client-side, but each row now carries only raw fields (11, down from ~20):
+  the duplicated `searchText` (a full lowercased copy of title + description) and every precomputed
+  display string (`date`, distance/duration/IF/HR labels, the IF bar width, per-row sport `tag`/
+  `color`) are gone. Labels are derived in the browser from the raw values, and the sport display
+  maps moved to a client-importable `$lib/sport.ts`. This is the biggest bytes-over-the-wire win on
+  the mobile-over-Tailscale path and scales with history size. Filter/sort behavior is unchanged
+  (the component precomputes a `searchText`/`distanceDisplay` once per load, so the per-keystroke
+  filter stays a tight numeric pass).
+- **`docker compose up -d --build` is now a true one-line setup.** A root entrypoint chowns the
+  `/data` bind-mount to the target user (configurable via `PUID`/`PGID`, default `1000`) then drops
+  privileges with `gosu`, so a host user whose uid isn't 1000 no longer hits an EACCES on first
+  write — no manual `chown` needed.
+- **Production Docker image no longer ships the dev dependency tree.** The build stage runs
+  `pnpm prune --prod` before the runtime stage copies `node_modules`, dropping ~100 MB+ of build-only
+  packages (typescript, drizzle-kit, svelte-check, vitest, tsx). `svelte` and `vite` were moved from
+  `dependencies` to `devDependencies` (adapter-node bundles the app, so neither is needed at runtime).
+- **`planned_workouts` gets a `(user_id, scheduled_date)` index** matching the calendar and
+  analytics-range query shape (previously a per-user table scan).
+- **Garmin sync (experimental) is harder to wedge.** All Garmin network calls now have a 30 s
+  timeout, so a hung request can't leave a sync run holding its lock and critical-work slot until the
+  process restarts. The per-user sync lock is refreshed on a heartbeat as each activity is processed
+  (and release/renew are guarded by the owning instance), so a long first-run backfill that exceeds
+  the lock TTL no longer lets a concurrent auto-sync start a second run.
+
+### Removed
+- **The `/analytics` page and the `daily_metrics` cache are gone.** The page was an unused remnant
+  and the cache was write-only (nothing read it), so both were dead weight. They also computed daily
+  training load a *different* way than the dashboard (dropping the IF-based tier), which made the two
+  surfaces disagree on the same numbers. The dashboard EWMA is now the single PMC code path. Removes
+  the `daily_metrics` table (migration `0014`), its repository/service, the `pnpm analytics:rebuild`
+  CLI, and the dead route/API code.
 
 ### Fixed
+- **A missing or rotated `SYNC_ENCRYPTION_KEY` now fails loudly instead of silently.** If stored
+  Garmin credentials exist but can't be decrypted with the current key (key missing, changed, or
+  rotated), the app logs a clear error at startup explaining sync will keep failing and how to fix it
+  — instead of sync quietly dropping into a perpetual backoff with no actionable signal. The check is
+  log-only (never crashes the app over an experimental feature) and runs alongside the existing
+  boot-time key-format validation.
 - **Dashboard "Time in zone" and "Power profile" cards now show real data** — both were hardcoded
   placeholders. They are now aggregated from the per-activity HR/power streams over the dashboard's
   84-day (12-week) window. *Time in zone* buckets every HR sample into Z1–Z5 as a percentage of total
