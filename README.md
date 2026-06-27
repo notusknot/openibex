@@ -32,6 +32,14 @@ Generate a strong session secret and paste it into `.env` as `SESSION_SECRET=...
 openssl rand -base64 32
 ```
 
+If you want to use the experimental Garmin Connect sync feature, generate another secret and paste it into `.env` as `SYNC_ENCRYPTION_KEY`:
+
+```bash
+openssl rand -base64 32
+```
+
+If you are running behind a reverse proxy, set `ORIGIN` in `.env` to your domain.
+
 Then start the app:
 
 ```bash
@@ -55,6 +63,12 @@ All configuration is via environment variables in `.env`:
 | `SYNC_ENCRYPTION_KEY` | — | Required only for Garmin Connect sync (see below). |
 | `PUID` | `1000` | Host uid that owns `./data`; the app runs as it and the entrypoint chowns `/data` to match. |
 | `PGID` | `1000` | Host gid counterpart to `PUID`. |
+
+## Deploy on NixOS (flake module)
+
+OpenIbex ships a flake with a NixOS module that runs it on bare metal (a plain systemd service, no
+Docker) behind your own reverse proxy. See **[docs/nixos.md](docs/nixos.md)** for setup, options, and
+how to keep the flake input up to date.
 
 ## Garmin bulk import
 
@@ -131,4 +145,3 @@ pnpm db:migrate   # apply migrations
 
 - Run behind HTTPS in production and set a strong `SESSION_SECRET`.
 - Back up the host `./data` directory regularly — it holds the database, uploads, and stream data.
-- GPX/TCX import, OAuth, and coach workflows are not implemented yet.
