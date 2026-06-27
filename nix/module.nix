@@ -21,13 +21,29 @@ let
   # (e.g. SYNC_ENCRYPTION_KEY).
   secretEnvFile = "${cfg.dataDir}/secret.env";
 
+  # Secrets generated on first start, one base64 32-byte value per line, into a
+  # single 0600 file owned by the service user — never the world-readable Nix
+  # store. SYNC_ENCRYPTION_KEY lives here, in a *separate file from the database*,
+  # so a DB-only leak (SQL injection, or copying just openibex.db) still can't
+  # decrypt the stored Garmin tokens.
+  generatedKeys = [ "SESSION_SECRET" ] ++ lib.optional cfg.generateSyncEncryptionKey "SYNC_ENCRYPTION_KEY";
+
+  # Each key is (re)generated only if absent, so this is idempotent across
+  # restarts and never clobbers a value you pin via environmentFile.
   preStart = pkgs.writeShellScript "openibex-pre-start" ''
     set -eu
-    if [ ! -s ${lib.escapeShellArg secretEnvFile} ]; then
-      umask 077
-      printf 'SESSION_SECRET=%s\n' "$(${lib.getExe pkgs.openssl} rand -base64 32)" \
-        > ${lib.escapeShellArg secretEnvFile}
-    fi
+    umask 077
+    touch ${lib.escapeShellArg secretEnvFile}
+    chmod 600 ${lib.escapeShellArg secretEnvFile}
+
+    ensure_key() {
+      if ! grep -q "^$1=" ${lib.escapeShellArg secretEnvFile}; then
+        printf '%s=%s\n' "$1" "$(${lib.getExe pkgs.openssl} rand -base64 32)" \
+          >> ${lib.escapeShellArg secretEnvFile}
+      fi
+    }
+
+    ${lib.concatMapStringsSep "\n    " (k: "ensure_key ${k}") generatedKeys}
   '';
 in
 {
@@ -121,15 +137,35 @@ in
       description = "pino log level. Logs are JSON on stdout (captured by the journal).";
     };
 
+    generateSyncEncryptionKey = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Generate a `SYNC_ENCRYPTION_KEY` on first start (alongside `SESSION_SECRET`,
+        in the same `0600` file outside the Nix store) so the experimental Garmin
+        Connect sync works with no manual key management. The key encrypts stored
+        Garmin session tokens (AES-256-GCM) and lives in a separate file from the
+        database, so a database-only leak can't decrypt them.
+
+        Override it any time by setting `SYNC_ENCRYPTION_KEY` in
+        {option}`services.openibex.environmentFile` — that takes precedence. Set
+        this to `false` to manage the key entirely yourself or to opt out.
+
+        Note: losing or rotating the key makes existing encrypted tokens
+        unreadable, so every connected user must reconnect Garmin. Back up
+        {option}`services.openibex.dataDir` (which holds this file) to preserve it.
+      '';
+    };
+
     environmentFile = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
       example = "/run/secrets/openibex.env";
       description = ''
-        Optional path to an EnvironmentFile (e.g. from sops-nix/agenix) layered
-        on top of the auto-generated SESSION_SECRET. Use it to pin your own
-        SESSION_SECRET or to set SYNC_ENCRYPTION_KEY for the experimental Garmin
-        Connect sync (`openssl rand -base64 32`). Lines are `KEY=value`.
+        Optional path to an EnvironmentFile (e.g. from sops-nix/agenix) layered on
+        top of the auto-generated secrets, so its values win. Use it to pin your
+        own `SESSION_SECRET` or `SYNC_ENCRYPTION_KEY` (`openssl rand -base64 32`) —
+        for instance to manage the key outside the host. Lines are `KEY=value`.
       '';
     };
 

@@ -115,25 +115,43 @@ interfaces, set `origin`, and open the firewall:
 | `services.openibex.openRegistration` | `false` | Allow registration beyond the first (admin) user. |
 | `services.openibex.sessionTtlDays` | `30` | Session lifetime. |
 | `services.openibex.logLevel` | `"info"` | pino level; logs go to the journal. |
-| `services.openibex.environmentFile` | `null` | Secrets file (e.g. for `SYNC_ENCRYPTION_KEY`, or to pin `SESSION_SECRET`). |
+| `services.openibex.generateSyncEncryptionKey` | `true` | Auto-generate `SYNC_ENCRYPTION_KEY` for Garmin sync (see [Secrets](#secrets)). |
+| `services.openibex.environmentFile` | `null` | Secrets file to override the auto-generated keys (e.g. from sops-nix/agenix). |
 | `services.openibex.settings` | `{}` | Extra non-secret env vars (e.g. `CALENDAR_*` knobs, `BODY_SIZE_LIMIT`). |
 | `services.openibex.openFirewall` | `false` | Open `port` in the firewall. |
 | `services.openibex.package` | from the flake | The OpenIbex package to run. |
 
 ## Secrets
 
-`SESSION_SECRET` is generated automatically on first boot. The optional
-**experimental Garmin Connect sync** needs `SYNC_ENCRYPTION_KEY`
-(`openssl rand -base64 32`) — provide it (and anything else you'd rather not put
-in the Nix store) through an `environmentFile`, e.g. with
+Both secrets OpenIbex needs are **generated automatically on first boot** into a
+single `0600` file (`<dataDir>/secret.env`), owned by the service user and never
+written to the world-readable Nix store — so the default deployment is
+zero-touch:
+
+- `SESSION_SECRET` — signs session cookies.
+- `SYNC_ENCRYPTION_KEY` — encrypts the Garmin session tokens stored by the
+  experimental Garmin Connect sync (AES-256-GCM). Auto-generated so the feature
+  works the moment you connect an account, with no key wrangling. Turn this off
+  with `services.openibex.generateSyncEncryptionKey = false;` to opt out.
+
+**Why this is safe.** The key sits in `secret.env`, *not* in the database, so a
+database-only leak — a SQL-injection dump, or someone copying just
+`openibex.db` — can't decrypt the tokens; the encryption keeps doing its job.
+Both keys live in `dataDir`, so treat it as sensitive and include it in backups
+(losing `SYNC_ENCRYPTION_KEY` forces every connected user to reconnect Garmin).
+
+### Bringing your own keys
+
+To manage a key outside the host — e.g. with
 [sops-nix](https://github.com/Mic92/sops-nix) or
-[agenix](https://github.com/ryantm/agenix):
+[agenix](https://github.com/ryantm/agenix) — point `environmentFile` at it. Its
+values are layered *on top of* the generated ones, so they win:
 
 ```nix
 {
   services.openibex.environmentFile = "/run/secrets/openibex.env";
-  # File contents (KEY=value per line):
-  #   SYNC_ENCRYPTION_KEY=...
+  # File contents (KEY=value per line). Generate with: openssl rand -base64 32
+  #   SYNC_ENCRYPTION_KEY=...   # overrides the auto-generated key
   #   SESSION_SECRET=...        # optional: overrides the auto-generated one
 }
 ```
