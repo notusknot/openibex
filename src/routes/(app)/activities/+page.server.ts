@@ -11,5 +11,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		userId: locals.user.id,
 		prefs: locals.userPrefs
 	});
-	return { activities: data };
+	// Ship the unit preference once (not per row) so the client can format
+	// distances from raw meters.
+	const units = locals.userPrefs?.units ?? 'imperial';
+	return { activities: data, units };
 };

@@ -1,9 +1,17 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { theme, setTheme, type Theme } from '$lib/stores/theme';
+	import {
+		distanceLabel,
+		distanceUnit,
+		formatActivityDate,
+		formatDuration
+	} from '$lib/activities/format';
+	import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/sport';
 
 	export let data: PageData;
 	$: dashboard = data.dashboard;
+	$: units = data.units;
 
 	type Range = '4w' | '8w' | '12w';
 	let range: Range = '12w';
@@ -612,13 +620,17 @@
 				</div>
 				{#each dashboard.recent as r}
 					<a class="recent-row" href="/activities/{r.id}" title={r.title}>
-						<span class="recent-cell oi-mono recent-date">{r.date}</span>
+						<span class="recent-cell oi-mono recent-date">{formatActivityDate(r.startTimeMs)}</span>
 						<span class="recent-cell">
-							<span class="recent-tag oi-mono" style="background: {r.color}">{r.tag}</span>
+							<span class="recent-tag oi-mono" style="background: {SPORT_COLOR_VAR[r.sportLabel]}"
+								>{SPORT_TAG[r.sportLabel]}</span
+							>
 						</span>
 						<span class="recent-cell recent-title">{r.title}</span>
-						<span class="recent-cell oi-mono right">{r.distanceLabel} {r.distanceUnitLabel}</span>
-						<span class="recent-cell oi-mono right">{r.durationLabel}</span>
+						<span class="recent-cell oi-mono right"
+							>{distanceLabel(r.distanceM, units)} {distanceUnit(units)}</span
+						>
+						<span class="recent-cell oi-mono right">{formatDuration(r.durationSec)}</span>
 						<span class="recent-cell oi-mono right recent-tss">{r.tss}</span>
 					</a>
 				{/each}

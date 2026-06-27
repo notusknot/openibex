@@ -49,7 +49,7 @@ curl -s http://localhost:3000/api/health     # -> { "ok": true }
 
 Open `http://localhost:3000/register` and create your account. Note that the first user becomes the admin. Registration is closed to new users after that. Set `OPEN_REGISTRATION=true` in `.env` if you want to allow more.
 
-All data is stored in `./data`, which is mounted to `/data` in the Docker container. To back up your data, simply back up that directory.
+All data is stored in `./data`, which is mounted to `/data` in the Docker container. The container takes ownership of this directory automatically on startup, so there's no manual `chown` step — `docker compose up -d --build` is all you need. By default the app runs as uid/gid `1000`; if the host user that owns `./data` has a different uid, set `PUID`/`PGID` in `.env` to match (see [Configuration](#configuration)). To back up your data, simply back up the `./data` directory.
 
 ## Configuration
 
@@ -61,6 +61,8 @@ All configuration is via environment variables in `.env`:
 | `SESSION_TTL_DAYS` | `30` | Session lifetime. |
 | `OPEN_REGISTRATION` | `false` | Allow registration beyond the first user. |
 | `SYNC_ENCRYPTION_KEY` | — | Required only for Garmin Connect sync (see below). |
+| `PUID` | `1000` | Host uid that owns `./data`; the app runs as it and the entrypoint chowns `/data` to match. |
+| `PGID` | `1000` | Host gid counterpart to `PUID`. |
 
 ## Deploy on NixOS (flake module)
 

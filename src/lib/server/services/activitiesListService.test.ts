@@ -60,16 +60,52 @@ describe('getActivitiesList', () => {
 		expect(data.rows[0]!.startTimeMs).toBeGreaterThan(data.rows.at(-1)!.startTimeMs);
 	});
 
-	it('builds a lowercased searchText from title + description', async () => {
-		await seed(1, () => ({ title: 'Morning Tempo', description: 'INTERVALS at threshold' }));
+	it('ships a slim raw-fields-only row (no derived label or search strings)', async () => {
+		await seed(1, () => ({
+			title: 'Morning Tempo',
+			description: 'INTERVALS at threshold',
+			sport: 'Run',
+			distanceM: 13400,
+			durationSec: 3840,
+			avgHr: 152
+		}));
 		const { rows } = await getActivitiesList({ userId });
-		expect(rows[0]?.searchText).toBe('morning tempo intervals at threshold');
+		const row = rows[0]!;
+		// Raw fields the client needs for filter / sort / render.
+		expect(row).toMatchObject({
+			id: 'a0',
+			sport: 'run',
+			sportLabel: 'Run',
+			title: 'Morning Tempo',
+			description: 'INTERVALS at threshold', // raw, not lowercased — client derives search
+			distanceM: 13400,
+			durationSec: 3840,
+			avgHr: 152
+		});
+		expect(typeof row.startTimeMs).toBe('number');
+		expect(typeof row.tss).toBe('number');
+		// Derived/redundant fields must NOT be shipped (payload slimming).
+		for (const dropped of [
+			'searchText',
+			'date',
+			'tag',
+			'color',
+			'distanceDisplay',
+			'distanceLabel',
+			'distanceUnitLabel',
+			'durationLabel',
+			'ifLabel',
+			'ifPctWidth',
+			'hrLabel'
+		]) {
+			expect(row).not.toHaveProperty(dropped);
+		}
 	});
 
-	it('tolerates a null description in searchText', async () => {
+	it('ships description raw, and null when absent', async () => {
 		await seed(1, () => ({ title: 'Easy Spin', description: null }));
 		const { rows } = await getActivitiesList({ userId });
-		expect(rows[0]?.searchText).toBe('easy spin ');
+		expect(rows[0]?.description).toBeNull();
 	});
 
 	it('honors an explicit limit (recent-N) while reporting the full count', async () => {

@@ -80,9 +80,10 @@ across processes or browser tabs (auto-sync fires from every page load). Moving 
 
 ## Analytics surfaces
 
-Pages read live from `activities`. The dashboard (EWMA) and the analytics page (rolling averages)
-compute the PMC differently — see [DOMAIN.md](DOMAIN.md). The optional `daily_metrics` cache
-(rebuilt via `pnpm analytics:rebuild`) speeds aggregation but is **not required for correctness**.
+The dashboard reads live from `activities` and computes the PMC (Fitness/Fatigue/Form) via an EWMA
+over an 84-day window — see [DOMAIN.md](DOMAIN.md). There is a single PMC code path. (A former
+`/analytics` page and its `daily_metrics` cache were removed: the page was unused and the cache was
+write-only, so they were dead weight and a second, divergent way to compute the same numbers.)
 
 ## Storage layout (bind-mounted to `/data` in Docker, `./data` in dev)
 

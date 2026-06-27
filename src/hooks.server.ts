@@ -3,6 +3,7 @@ import { redirect } from '@sveltejs/kit';
 import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
 import { registerShutdownHandlers } from '$lib/server/shutdown';
 import { validateConfigOrThrow } from '$lib/server/env';
+import { warnIfSyncKeyMisconfigured } from '$lib/server/sync/keyCheck';
 
 // Runs once when the server module loads. Fail fast on missing/invalid config,
 // then install handlers that drain in-flight writes + checkpoint the WAL + close
@@ -10,6 +11,10 @@ import { validateConfigOrThrow } from '$lib/server/env';
 // (the test runner imports this module before any per-test env is set up).
 if (!process.env.VITEST) {
 	validateConfigOrThrow();
+	// Loud (but non-fatal) warning if stored Garmin credentials can't be
+	// decrypted with the current SYNC_ENCRYPTION_KEY. Fire-and-forget so it
+	// never delays boot; experimental sync must not gate the whole app.
+	void warnIfSyncKeyMisconfigured();
 }
 registerShutdownHandlers();
 
