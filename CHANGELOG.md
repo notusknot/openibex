@@ -15,6 +15,17 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **NixOS module for bare-metal self-hosting** — the flake now exposes
+  `nixosModules.default` (plus `packages.<system>.openibex` and `overlays.default`) so a NixOS host can
+  run OpenIbex as a plain systemd service with no Docker, behind your own reverse proxy (Caddy, nginx,
+  Traefik, …). The package builds the adapter-node bundle and compiles the native `better-sqlite3`
+  against the pinned Node; the module runs it as a dedicated `openibex` system user under
+  `/var/lib/openibex`, binds to `127.0.0.1` by default, auto-generates `SESSION_SECRET` on first boot
+  (`0600`, outside the Nix store), applies systemd hardening, and offers typed options for host/port/
+  origin/registration/log level plus an `environmentFile` for secrets (e.g. `SYNC_ENCRYPTION_KEY`), a
+  `settings` escape hatch for `CALENDAR_*`/`BODY_SIZE_LIMIT` knobs, and `openFirewall`. Setup,
+  reverse-proxy guidance, the options reference, and the update flow live in
+  [docs/nixos.md](docs/nixos.md).
 - **Calendar subscription sync (experimental)** — subscribe to a read-only public ICS feed (e.g. a
   coach-managed team calendar) in Settings → Calendar subscriptions; its events become planned
   workouts on your calendar, editable and deletable like any you create. Title/description/date/
