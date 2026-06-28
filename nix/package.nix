@@ -3,6 +3,8 @@
   stdenv,
   nodejs_22,
   pnpm_10,
+  fetchPnpmDeps,
+  pnpmConfigHook,
   python3,
   node-gyp,
   makeWrapper,
@@ -70,8 +72,12 @@ stdenv.mkDerivation (finalAttrs: {
         && !(lib.hasSuffix ".log" base);
     };
 
-  pnpmDeps = pnpm.fetchDeps {
+  pnpmDeps = fetchPnpmDeps {
     inherit (finalAttrs) pname version src;
+    # Pin the pnpm major the lockfile was written for. The top-level
+    # fetchPnpmDeps/pnpmConfigHook default to the newest pnpm; pinning keeps the
+    # store layout (and therefore the hash below) stable across nixpkgs bumps.
+    inherit pnpm;
     fetcherVersion = 3;
     # Regenerate after any pnpm-lock.yaml change: set to lib.fakeHash, run
     # `nix build .#openibex`, and paste the hash from the mismatch error.
@@ -80,7 +86,8 @@ stdenv.mkDerivation (finalAttrs: {
 
   nativeBuildInputs = [
     nodejs
-    pnpm.configHook # offline `pnpm install` from pnpmDeps (always --ignore-scripts)
+    pnpm # pnpm CLI for the explicit install/rebuild in the phases below
+    pnpmConfigHook # offline `pnpm install` from pnpmDeps (always --ignore-scripts)
     python3 # node-gyp dependency
     node-gyp # compiles better-sqlite3
     makeWrapper
