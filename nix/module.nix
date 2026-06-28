@@ -248,8 +248,16 @@ in
         ExecStart = lib.getExe cfg.package;
         # secret.env first (auto-generated), then the user's file so it can
         # override SESSION_SECRET / add SYNC_ENCRYPTION_KEY.
+        #
+        # The `-` prefix makes secret.env optional: systemd reads EnvironmentFile
+        # fresh before spawning *each* Exec command, and on first boot the file
+        # does not exist yet when ExecStartPre runs (ExecStartPre is what creates
+        # it). Without the `-`, that missing-file load is fatal and the unit dies
+        # before start-pre with "Failed to load environment files". The prefix
+        # lets the ExecStartPre pass skip the absent file; the ExecStart pass then
+        # re-reads it, now populated with the generated keys.
         EnvironmentFile =
-          [ secretEnvFile ] ++ lib.optional (cfg.environmentFile != null) cfg.environmentFile;
+          [ "-${secretEnvFile}" ] ++ lib.optional (cfg.environmentFile != null) cfg.environmentFile;
         User = cfg.user;
         Group = cfg.group;
         Restart = "on-failure";
