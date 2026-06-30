@@ -6,12 +6,12 @@ import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 
 import { getEnv } from '$lib/server/env';
-import { getActivityFileByIdForUser } from '$lib/server/repositories/activityFilesRepository';
+import { getActivityFileForDownload } from '$lib/server/services/activityDetailService';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) throw redirect(303, '/login');
 
-	const file = await getActivityFileByIdForUser(params.id, locals.user.id);
+	const file = await getActivityFileForDownload(locals.user.id, params.id);
 	if (!file) throw error(404, 'Not found');
 
 	const absPath = path.join(getEnv().OPENIBEX_DATA_DIR, file.filePath);

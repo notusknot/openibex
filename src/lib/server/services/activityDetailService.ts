@@ -504,6 +504,16 @@ export async function getActivityDetail(input: {
 	};
 }
 
+/** Resolve an activity file the user owns, for the download endpoint — so the
+ * route goes through a service rather than the repository directly. Returns null
+ * (→ 404) when the file doesn't exist or belongs to another user. */
+export async function getActivityFileForDownload(
+	userId: string,
+	fileId: string
+): Promise<DbActivityFile | undefined> {
+	return getActivityFileByIdForUser(fileId, userId);
+}
+
 /**
  * Permanently delete an activity belonging to a user, along with its parsed
  * stream blob and its original uploaded file. Workout links are removed by the

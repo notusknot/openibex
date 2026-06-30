@@ -98,6 +98,14 @@ capability and the patch version for fixes; breaking changes may land in a minor
   committing on `main` or with failing tests.
 
 ### Changed
+- **Several routes moved back onto the route → service → repository path.** The imports list/detail
+  pages, the activity-file download endpoint, the activity "unlink" action, and the new-planned-
+  workout page reached into repositories (or the Drizzle schema) directly, bypassing the service
+  layer the architecture relies on (and that a future Go API would hang off). They now go through a
+  small `importsService` / existing services, and the sport list for dropdowns comes from a shared
+  `$lib/sport` `SPORTS` const instead of the schema module. (The settings page and the planned-
+  workout *edit* page still hold this coupling — both mix real logic into the route and need a proper
+  service extraction rather than thin pass-throughs; left as a focused follow-up.)
 - **Fonts are self-hosted (Fontsource) instead of loaded from Google Fonts.** The Google Fonts
   `<link>` + `preconnect`s in `app.html` are gone; Archivo and JetBrains Mono now ship from the
   app's own origin via `@fontsource/*`, imported in the root layout. Only the **latin subset** and

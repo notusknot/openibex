@@ -2,7 +2,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { error, redirect } from '@sveltejs/kit';
 
 import { getActivityDetail, deleteActivity } from '$lib/server/services/activityDetailService';
-import { deleteWorkoutLinksForActivity } from '$lib/server/repositories/workoutLinksRepository';
+import { unlinkActivity } from '$lib/server/services/workoutMatchingService';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!locals.user) throw redirect(303, '/login');
@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 export const actions: Actions = {
 	unlink: async ({ locals, params }) => {
 		if (!locals.user) throw redirect(303, '/login');
-		await deleteWorkoutLinksForActivity(locals.user.id, params.id);
+		await unlinkActivity(locals.user.id, params.id);
 		return { success: true };
 	},
 	delete: async ({ locals, params }) => {

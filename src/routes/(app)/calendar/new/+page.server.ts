@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 
-import { sports } from '$lib/server/db/schema';
+import { SPORTS as sports } from '$lib/sport';
 import { createPlannedWorkoutForUser } from '$lib/server/services/plannedWorkoutsService';
 import { isLocalDate, formatLocalDate } from '$lib/validation/localDate';
 import { parsePlannedWorkoutForm } from '$lib/validation/plannedWorkout';

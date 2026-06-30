@@ -111,6 +111,12 @@ export async function ensureAutoMatchesForRange(input: {
 	}
 }
 
+/** Remove any plan↔activity links for an activity (the "unlink" action on the
+ * activity page), keeping the route off the repository layer. */
+export async function unlinkActivity(userId: string, activityId: string): Promise<void> {
+	await deleteWorkoutLinksForActivity(userId, activityId);
+}
+
 export async function setManualLink(input: { userId: string; plannedWorkoutId: string; activityId: string }): Promise<void> {
 	const planned = await getPlannedWorkoutByIdForUser(input.plannedWorkoutId, input.userId);
 	if (!planned) throw new Error('Planned workout not found.');
