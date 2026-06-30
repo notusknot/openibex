@@ -85,10 +85,19 @@ TLS at the proxy, and keep the app port off the public network (no
 > 512&nbsp;KB by default, and some proxies add their own cap (nginx defaults to
 > 1&nbsp;MB; Caddy has none). A long activity's FIT file can exceed that, and the
 > **Settings → Import Garmin export** bulk upload (a whole "Export Your Data"
-> archive) is far larger still. Raise the app's limit with
-> `services.openibex.settings.BODY_SIZE_LIMIT = "1G";` and lift the proxy's cap
-> to match if it has one. (The CLI `pnpm import:garmin` reads straight from disk
-> and is unaffected by this limit.)
+> archive) is far larger still. The module already raises the app limit to
+> 512&nbsp;MB by default (see `bodySizeLimit` below); bump it for bigger archives
+> and lift the proxy's cap to match if it has one:
+>
+> ```nix
+> services.openibex.bodySizeLimit = 1073741824; # 1 GiB, in BYTES
+> ```
+>
+> **The app limit is in raw bytes — adapter-node does _not_ accept `K`/`M`/`G`
+> suffixes** (`"512M"` is parsed as 512 *bytes*). The proxy cap is separate and
+> uses its own syntax (Caddy `request_body { max_size 1GB }`); raising only the
+> proxy does **not** raise the app limit. The CLI `pnpm import:garmin` reads
+> straight from disk and is unaffected by either.
 
 ### Direct access (no proxy)
 
@@ -118,9 +127,10 @@ interfaces, set `origin`, and open the firewall:
 | `services.openibex.openRegistration` | `false` | Allow registration beyond the first (admin) user. |
 | `services.openibex.sessionTtlDays` | `30` | Session lifetime. |
 | `services.openibex.logLevel` | `"info"` | pino level; logs go to the journal. |
+| `services.openibex.bodySizeLimit` | `536870912` | Max upload body in **bytes** (512 MiB). Raise for big Garmin export archives. No `K`/`M`/`G` suffixes. |
 | `services.openibex.generateSyncEncryptionKey` | `true` | Auto-generate `SYNC_ENCRYPTION_KEY` for Garmin sync (see [Secrets](#secrets)). |
 | `services.openibex.environmentFile` | `null` | Secrets file to override the auto-generated keys (e.g. from sops-nix/agenix). |
-| `services.openibex.settings` | `{}` | Extra non-secret env vars (e.g. `CALENDAR_*` knobs, `BODY_SIZE_LIMIT`). |
+| `services.openibex.settings` | `{}` | Extra non-secret env vars (e.g. `CALENDAR_*` knobs). |
 | `services.openibex.openFirewall` | `false` | Open `port` in the firewall. |
 | `services.openibex.package` | from the flake | The OpenIbex package to run. |
 
