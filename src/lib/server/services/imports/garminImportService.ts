@@ -84,6 +84,14 @@ type Candidate = DiscoveredFile & {
 export async function importGarminHistoricalExport(input: {
 	userEmail: string;
 	path: string;
+	/**
+	 * Reuse an existing batch row instead of creating a new one. The web
+	 * bulk-import pre-creates the batch (so the request can redirect to the log
+	 * immediately) and then runs this in the background; the CLI omits it and a
+	 * fresh batch is created here. Everything else — discovery, dedup, parsing,
+	 * per-item logging — is identical regardless of caller.
+	 */
+	batchId?: string;
 }): Promise<GarminImportSummary> {
 	const userEmail = normalizeEmail(input.userEmail);
 	const user = await getUserByEmail(userEmail);
@@ -91,17 +99,19 @@ export async function importGarminHistoricalExport(input: {
 		throw new Error(`User not found: ${userEmail}`);
 	}
 
-	const batchId = crypto.randomUUID();
+	const batchId = input.batchId ?? crypto.randomUUID();
 	const now = new Date();
 
-	await createImportBatch({
-		id: batchId,
-		userId: user.id,
-		source: 'garmin-export',
-		originalName: path.basename(input.path),
-		status: 'processing',
-		startedAt: now
-	});
+	if (!input.batchId) {
+		await createImportBatch({
+			id: batchId,
+			userId: user.id,
+			source: 'garmin-export',
+			originalName: path.basename(input.path),
+			status: 'processing',
+			startedAt: now
+		});
+	}
 
 	let totalFiles = 0;
 	let processedFiles = 0;

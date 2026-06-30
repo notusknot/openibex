@@ -42,6 +42,12 @@
 	$: garminError = gform.garminError as string | undefined;
 	$: garminNotice = noticeFrom(gform);
 
+	// Garmin bulk-import (settings → Import Garmin export). Success is a redirect
+	// to the batch log, so only the error path surfaces here.
+	let importing = false;
+	let importFailed = false;
+	$: importError = gform.importError as string | undefined;
+
 	// Calendar (ICS) subscriptions.
 	$: calendar = data.calendar;
 	$: calendarError = gform.calendarError as string | undefined;
@@ -404,6 +410,57 @@
 						<button type="button" class="btn-soft" disabled>Connect</button>
 					</div>
 				</div>
+			</section>
+
+			<section id="import" class="card">
+				<div class="card-title">Import Garmin export</div>
+				<div class="card-eyebrow oi-mono">
+					Bulk-import your full history from Garmin's <strong>Account → Export Your Data</strong> archive.
+					Upload the <code>.zip</code> — FIT activities are parsed and de-duplicated against what you
+					already have, so re-uploading is always safe. This runs the same job as the
+					<code>pnpm import:garmin</code> CLI; progress and a per-file log appear on the
+					<a href="/imports">imports</a> page.
+				</div>
+
+				<form
+					class="import-form"
+					method="POST"
+					action="?/importGarminExport"
+					enctype="multipart/form-data"
+					use:enhance={() => {
+						importing = true;
+						importFailed = false;
+						return async ({ result, update }) => {
+							importing = false;
+							// The success path is a 303 redirect to the batch log; anything
+							// that isn't a redirect here is an error (e.g. body too large).
+							if (result.type === 'error') importFailed = true;
+							await update({ reset: false });
+						};
+					}}
+				>
+					<label class="field">
+						<span class="field-label oi-mono">Garmin export archive (.zip)</span>
+						<input class="oi-input" type="file" name="file" accept=".zip,application/zip" required />
+					</label>
+					<div class="import-foot">
+						<span class="row-help oi-mono">
+							Large exports may require raising the server's <code>BODY_SIZE_LIMIT</code> — see the docs.
+						</span>
+						<button class="btn btn-primary" disabled={importing}>
+							{importing ? 'Uploading…' : 'Import export'}
+						</button>
+					</div>
+				</form>
+
+				{#if importError}
+					<div class="form-error">{importError}</div>
+				{:else if importFailed}
+					<div class="form-error">
+						Upload failed — the file may exceed the server's <code>BODY_SIZE_LIMIT</code>. Raise it
+						(and any reverse-proxy body cap) and try again.
+					</div>
+				{/if}
 			</section>
 
 			<section id="calendar" class="card">
@@ -852,6 +909,33 @@
 		gap: 12px;
 	}
 
+	.import-form {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.import-foot {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+	}
+	.import-form input[type='file'] {
+		font: 400 12px 'Archivo', system-ui, sans-serif;
+		padding: 8px 11px;
+		cursor: pointer;
+	}
+	.card-eyebrow code,
+	.row-help code,
+	.form-error code {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.92em;
+		background: var(--bg-soft);
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		padding: 0 4px;
+	}
+
 	.btn {
 		font: 600 12px 'Archivo', system-ui, sans-serif;
 		color: var(--btn-ink);
@@ -943,6 +1027,10 @@
 		}
 		.form-foot {
 			flex-wrap: wrap;
+		}
+		.import-foot {
+			flex-direction: column;
+			align-items: stretch;
 		}
 		.save-status {
 			width: 100%;

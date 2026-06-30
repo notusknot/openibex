@@ -15,6 +15,15 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Garmin bulk import from the web** — **Settings → Import Garmin export** now accepts a full Garmin
+  "Export Your Data" archive (`.zip`) and runs the exact same job as the `pnpm import:garmin` CLI: the
+  upload is extracted server-side, then discovery, the four-stage de-duplication (file SHA-256 / prior
+  upload / Garmin activity id / parsed fingerprint), worker-thread FIT parsing, and smart-title metadata
+  all behave identically. The import runs in the background (a full export can take minutes) and the
+  request redirects straight to the batch's **Imports** log, where the per-file progress/imported/
+  duplicate/failed counts stream in just like a CLI run. Re-uploading the same export is always safe.
+  Large archives may require raising `BODY_SIZE_LIMIT` (see [docs/nixos.md](docs/nixos.md)); the CLI is
+  unaffected as it reads from disk.
 - **NixOS module for bare-metal self-hosting** — the flake now exposes
   `nixosModules.default` (plus `packages.<system>.openibex` and `overlays.default`) so a NixOS host can
   run OpenIbex as a plain systemd service with no Docker, behind your own reverse proxy (Caddy, nginx,
