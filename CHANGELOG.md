@@ -15,6 +15,17 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Faster in-app navigation (perceived + on-the-wire)** — clicking between pages now shows an
+  immediate thin top progress bar (`src/lib/components/ui/NavProgress.svelte`, driven by SvelteKit's
+  `navigating` store), so a tap gives feedback instantly instead of leaving the old page frozen until
+  data arrives — the main reason link navigation *felt* slower than typing the URL. Dynamic server
+  responses (SSR HTML and `__data.json`) are now gzip/brotli-compressed in `hooks.server.ts`, and the
+  static client bundle is precompressed (`adapter-node`'s `precompress`), sharply cutting transfer size
+  over mobile/Tailscale (e.g. the activities page data drops ~54 KB → ~7 KB). Route code for the fixed
+  nav tabs is preloaded on idle plus `data-sveltekit-preload-code="hover"`, so the first tap on a tab no
+  longer waits on a module fetch. Server `load` work was profiled and deliberately left unchanged — it
+  was already single-digit-millisecond; the bottleneck was bytes on the wire and missing feedback, not
+  compute.
 - **Installable PWA with offline shell** — OpenIbex now registers a service worker
   (`src/service-worker.ts`) that precaches the app shell (content-hashed build chunks + public
   static files) for instant standalone launch, while keeping **all data network-first** so

@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { handle } from './hooks.server';
@@ -36,6 +37,7 @@ describe('hooks.server', () => {
 	it('protected page redirects unauthenticated user', async () => {
 		const event: any = {
 			url: new URL('http://localhost/dashboard'),
+			request: new Request('http://localhost/dashboard'),
 			cookies: makeCookies(),
 			locals: {}
 		};
@@ -56,6 +58,7 @@ describe('hooks.server', () => {
 
 		const event: any = {
 			url: new URL('http://localhost/dashboard'),
+			request: new Request('http://localhost/dashboard'),
 			cookies: makeCookies({ [SESSION_COOKIE_NAME]: session.token }),
 			locals: {}
 		};
@@ -67,5 +70,51 @@ describe('hooks.server', () => {
 
 		expect(response.status).toBe(200);
 		expect(event.locals.user?.email).toBe('a@b.com');
+	});
+
+	async function authedEvent(email: string, acceptEncoding?: string) {
+		const { session } = await registerWithEmailPassword({ email, password: 'password123' });
+		return {
+			url: new URL('http://localhost/dashboard'),
+			request: new Request('http://localhost/dashboard', {
+				headers: acceptEncoding ? { 'accept-encoding': acceptEncoding } : {}
+			}),
+			cookies: makeCookies({ [SESSION_COOKIE_NAME]: session.token }),
+			locals: {}
+		} as any;
+	}
+
+	it('gzip-compresses a large compressible response when the client accepts it', async () => {
+		const event = await authedEvent('c@d.com', 'gzip');
+		const body = JSON.stringify({ pad: 'x'.repeat(5000) });
+		const response = await handle({
+			event,
+			resolve: async () => new Response(body, { headers: { 'content-type': 'application/json' } })
+		} as any);
+
+		expect(response.headers.get('content-encoding')).toBe('gzip');
+		expect(response.headers.get('vary')).toMatch(/accept-encoding/i);
+		const out = Buffer.from(await response.arrayBuffer());
+		expect(out.byteLength).toBeLessThan(body.length); // genuinely smaller on the wire
+		expect(gunzipSync(out).toString()).toBe(body); // and round-trips losslessly
+	});
+
+	it('leaves a small response uncompressed (overhead not worth it)', async () => {
+		const event = await authedEvent('e@f.com', 'gzip');
+		const response = await handle({
+			event,
+			resolve: async () => new Response('tiny', { headers: { 'content-type': 'application/json' } })
+		} as any);
+		expect(response.headers.get('content-encoding')).toBeNull();
+	});
+
+	it('does not compress when the client sends no accept-encoding', async () => {
+		const event = await authedEvent('g@h.com');
+		const body = JSON.stringify({ pad: 'x'.repeat(5000) });
+		const response = await handle({
+			event,
+			resolve: async () => new Response(body, { headers: { 'content-type': 'application/json' } })
+		} as any);
+		expect(response.headers.get('content-encoding')).toBeNull();
 	});
 });

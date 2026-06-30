@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, preloadCode } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { theme } from '$lib/stores/theme';
+	import NavProgress from '$lib/components/ui/NavProgress.svelte';
 
 	export let user: { displayName: string | null; email: string; role: string };
 	export let railSummary: {
@@ -39,6 +40,19 @@
 	let mounted = false;
 	onMount(() => {
 		mounted = true;
+		// Warm the route code for the fixed nav targets during idle time, so the
+		// first tap on a tab doesn't pay a module fetch. On mobile there's no hover
+		// to trigger SvelteKit's per-link preload, so this is where mobile gets its
+		// head start. Code only (no `preloadData`) — data stays per-request, never
+		// cached, so this respects the "never cache authenticated data" rule.
+		const warm = () => {
+			for (const item of navItems) void preloadCode(item.href);
+		};
+		const ric = (window as unknown as {
+			requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+		}).requestIdleCallback;
+		if (typeof ric === 'function') ric(warm, { timeout: 2000 });
+		else setTimeout(warm, 800);
 	});
 
 	// `.oi-main` is the scroll container (the root is fixed at 100vh), so
@@ -125,6 +139,7 @@
 </script>
 
 <div class="oi oi-root" data-theme={$theme}>
+	<NavProgress />
 	<aside class="rail">
 		<a class="brand-row" href="/dashboard">
 			<div class="logo oi-mono">OI</div>
