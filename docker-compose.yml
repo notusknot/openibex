@@ -23,6 +23,11 @@ services:
       # pass the built-in CSRF check (compares request Origin header to this).
       # Override to https://your.domain when running behind a reverse proxy.
       - ORIGIN=${ORIGIN:-http://localhost:3000}
+      # Max request-body size in BYTES (adapter-node default is 512 KB). Needed
+      # above that for large single FIT uploads and the Settings → Import Garmin
+      # export bulk upload. RAW BYTES ONLY — "512M" is read as 512 bytes. Default
+      # here is 512 MiB; a reverse proxy may add its own separate body cap.
+      - BODY_SIZE_LIMIT=${BODY_SIZE_LIMIT:-536870912}
       # The entrypoint chowns /data to this uid:gid and runs the app as it
       # (default 1000). Set these in .env to match the host user that owns
       # ./data if it isn't uid 1000 — no manual chown needed either way.

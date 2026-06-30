@@ -169,6 +169,21 @@ in
       '';
     };
 
+    bodySizeLimit = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 536870912; # 512 MiB
+      example = 1073741824;
+      description = ''
+        Maximum accepted request-body size in BYTES, exposed to adapter-node as
+        `BODY_SIZE_LIMIT`. The web bulk-import (Settings → Import Garmin export)
+        and long single FIT uploads need this above adapter-node's 512&nbsp;KB
+        default, so it ships at 512&nbsp;MiB here. **Raw byte count only** —
+        adapter-node does not understand `K`/`M`/`G` suffixes (`"512M"` would be
+        read as 512 *bytes*). A reverse proxy may impose its own separate body cap
+        that must be raised to match.
+      '';
+    };
+
     settings = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -240,6 +255,9 @@ in
         OPEN_REGISTRATION = lib.boolToString cfg.openRegistration;
         SESSION_TTL_DAYS = toString cfg.sessionTtlDays;
         LOG_LEVEL = cfg.logLevel;
+        # adapter-node body cap, in BYTES (no K/M/G suffixes). Raised above the
+        # 512 KB upstream default so web uploads / bulk import work out of the box.
+        BODY_SIZE_LIMIT = toString cfg.bodySizeLimit;
       }
       // cfg.settings;
 

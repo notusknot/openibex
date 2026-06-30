@@ -43,8 +43,11 @@ capability and the patch version for fixes; breaking changes may land in a minor
   all behave identically. The import runs in the background (a full export can take minutes) and the
   request redirects straight to the batch's **Imports** log, where the per-file progress/imported/
   duplicate/failed counts stream in just like a CLI run. Re-uploading the same export is always safe.
-  Large archives may require raising `BODY_SIZE_LIMIT` (see [docs/nixos.md](docs/nixos.md)); the CLI is
-  unaffected as it reads from disk.
+  The NixOS module now raises adapter-node's request-body cap to 512&nbsp;MiB by default (new
+  `services.openibex.bodySizeLimit`, in **bytes** — adapter-node takes no `K`/`M`/`G` suffixes) and the
+  Docker compose file exposes `BODY_SIZE_LIMIT` likewise, so uploads work out of the box; an
+  over-limit upload now returns a clear message instead of a 500. The CLI `pnpm import:garmin` is
+  unaffected as it reads from disk. See [docs/nixos.md](docs/nixos.md).
 - **NixOS module for bare-metal self-hosting** — the flake now exposes
   `nixosModules.default` (plus `packages.<system>.openibex` and `overlays.default`) so a NixOS host can
   run OpenIbex as a plain systemd service with no Docker, behind your own reverse proxy (Caddy, nginx,
