@@ -1,5 +1,6 @@
 import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
 import { registerShutdownHandlers } from '$lib/server/shutdown';
 import { validateConfigOrThrow } from '$lib/server/env';
@@ -45,6 +46,49 @@ function isProtectedPath(pathname: string): boolean {
 	return true;
 }
 
+// adapter-node ships no response compression and is typically reached directly
+// (Tailscale serve doesn't gzip), so SSR HTML and __data.json go over the wire
+// uncompressed — e.g. the activities page data is ~54 KB raw, ~7 KB gzipped, a
+// real cost on a phone over Tailscale. Static assets are handled by adapter's
+// `precompress` (served by sirv before this hook); this covers the *dynamic*
+// text responses sirv never sees. Only GET 200s with a compressible text type
+// and a body past one TCP segment are touched.
+//
+// NOTE: this buffers the full body, so it must not be used with streamed
+// responses (un-awaited promises from a `load`). The app awaits all loads today;
+// revisit this if SvelteKit streaming is introduced.
+const COMPRESSIBLE = /^(?:text\/|application\/(?:json|javascript|xml|.*\+json|.*\+xml)|image\/svg\+xml)/i;
+const MIN_COMPRESS_BYTES = 1400;
+
+async function maybeCompress(request: Request, response: Response): Promise<Response> {
+	if (request.method !== 'GET' || response.status !== 200) return response;
+	if (response.headers.has('content-encoding')) return response;
+	if (!COMPRESSIBLE.test(response.headers.get('content-type') ?? '')) return response;
+
+	const accept = request.headers.get('accept-encoding') ?? '';
+	const useBr = /\bbr\b/.test(accept);
+	const useGzip = /\bgzip\b/.test(accept);
+	if (!useBr && !useGzip) return response;
+
+	const body = Buffer.from(await response.arrayBuffer());
+	const headers = new Headers(response.headers);
+	// Below ~one TCP segment, compression overhead isn't worth it — re-send raw
+	// (the body was already consumed, so rebuild the response from the buffer).
+	if (body.byteLength < MIN_COMPRESS_BYTES) {
+		return new Response(body, { status: response.status, statusText: response.statusText, headers });
+	}
+
+	const compressed = useBr
+		? brotliCompressSync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } })
+		: gzipSync(body);
+	headers.set('content-encoding', useBr ? 'br' : 'gzip');
+	headers.set('content-length', String(compressed.byteLength));
+	const vary = headers.get('vary');
+	if (!vary) headers.set('vary', 'Accept-Encoding');
+	else if (!/\baccept-encoding\b/i.test(vary)) headers.set('vary', `${vary}, Accept-Encoding`);
+	return new Response(compressed, { status: response.status, statusText: response.statusText, headers });
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const token = event.cookies.get(SESSION_COOKIE_NAME) ?? '';
 	const result = await getUserFromSessionToken(token);
@@ -82,5 +126,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('referrer-policy', 'same-origin');
 	response.headers.set('x-frame-options', 'DENY');
 	response.headers.set('permissions-policy', 'geolocation=(), microphone=(), camera=()');
-	return response;
+	return maybeCompress(event.request, response);
 };
