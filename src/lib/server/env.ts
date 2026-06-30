@@ -15,6 +15,16 @@ export type OpenIbexEnv = {
 	OPENIBEX_IMPORT_DIR: string;
 	OPENIBEX_ENV: string;
 	NODE_ENV: string;
+	// True unless NODE_ENV/OPENIBEX_ENV is EXPLICITLY development or test. Crucially
+	// this defaults to TRUE when neither is set — `node build` (production `pnpm
+	// start`) sets no NODE_ENV, and the old `=== 'production'` check then silently
+	// dropped into dev mode (optional SESSION_SECRET, hardcoded dev secret,
+	// non-Secure cookies). Fail safe: unknown ⇒ production.
+	isProduction: boolean;
+	// IANA timezone (e.g. "America/Los_Angeles") for the app's LOCAL day, used by
+	// the dashboard/calendar to bucket activities. Unset → the server process
+	// zone (correct only when the container clock matches the athlete's zone).
+	OPENIBEX_TZ?: string;
 	OPEN_REGISTRATION: boolean;
 	SESSION_SECRET?: string;
 	SESSION_TTL_DAYS: number;
@@ -57,6 +67,14 @@ export function getEnv(): OpenIbexEnv {
 	if (!Number.isFinite(sessionTtlDays) || sessionTtlDays <= 0) {
 		throw new Error('SESSION_TTL_DAYS must be a positive number (example: 30)');
 	}
+	// Fail-safe production detection: production UNLESS explicitly dev/test. Read
+	// the RAW vars (not the defaulted fields) so an unset NODE_ENV reads as prod.
+	const nodeEnvRaw = readEnv('NODE_ENV');
+	const openibexEnvRaw = readEnv('OPENIBEX_ENV');
+	const explicitlyNonProd = [nodeEnvRaw, openibexEnvRaw].some(
+		(v) => v === 'development' || v === 'test'
+	);
+
 	const validLogLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
 	const logLevelRaw = (readEnv('LOG_LEVEL') ?? 'info').toLowerCase();
 	const logLevel = validLogLevels.includes(logLevelRaw) ? logLevelRaw : 'info';
@@ -75,8 +93,10 @@ export function getEnv(): OpenIbexEnv {
 		OPENIBEX_STREAM_DIR: readEnv('OPENIBEX_STREAM_DIR') ?? path.join(dataDir, 'streams'),
 		OPENIBEX_EXPORT_DIR: readEnv('OPENIBEX_EXPORT_DIR') ?? path.join(dataDir, 'exports'),
 		OPENIBEX_IMPORT_DIR: readEnv('OPENIBEX_IMPORT_DIR') ?? path.join(dataDir, 'imports'),
-		OPENIBEX_ENV: readEnv('OPENIBEX_ENV') ?? 'development',
-		NODE_ENV: readEnv('NODE_ENV') ?? 'development',
+		OPENIBEX_ENV: openibexEnvRaw ?? 'development',
+		NODE_ENV: nodeEnvRaw ?? 'development',
+		isProduction: !explicitlyNonProd,
+		OPENIBEX_TZ: readEnv('OPENIBEX_TZ'),
 		OPEN_REGISTRATION: openRegistration,
 		SESSION_SECRET: readEnv('SESSION_SECRET'),
 		SESSION_TTL_DAYS: sessionTtlDays,
@@ -100,7 +120,7 @@ export function getEnv(): OpenIbexEnv {
  */
 export function validateConfigOrThrow(): void {
 	const env = getEnv(); // also validates SESSION_TTL_DAYS + LOG_LEVEL
-	const isProd = env.NODE_ENV === 'production' || env.OPENIBEX_ENV === 'production';
+	const isProd = env.isProduction;
 	const problems: string[] = [];
 
 	if (isProd && (!env.SESSION_SECRET || env.SESSION_SECRET.length < 16)) {
@@ -108,6 +128,14 @@ export function validateConfigOrThrow(): void {
 	}
 	if (isProd && !env.ORIGIN) {
 		problems.push('ORIGIN must be set in production (used for the CSRF origin check and Secure cookies).');
+	}
+	// A typo'd timezone would silently mis-bucket every analytic, so fail fast.
+	if (env.OPENIBEX_TZ !== undefined) {
+		try {
+			new Intl.DateTimeFormat('en-CA', { timeZone: env.OPENIBEX_TZ });
+		} catch {
+			problems.push(`OPENIBEX_TZ is not a valid IANA timezone (e.g. "America/Los_Angeles"): ${env.OPENIBEX_TZ}`);
+		}
 	}
 	// Optional, but if present it must be a valid 32-byte key — a malformed one
 	// would otherwise only blow up the first time a user connects/syncs Garmin.

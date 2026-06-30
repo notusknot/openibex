@@ -53,10 +53,10 @@ jobs:
           echo "Changed files:"; echo "$changed"
           # Files whose change should be reflected in the changelog.
           if echo "$changed" | grep -qE '^(src/|scripts/|drizzle/|package\.json$|Dockerfile$|docker-compose\.yml$|\.github/workflows/)'; then
-            if echo "$changed" | grep -qx 'CHANGELOG.md'; then
-              echo "✓ Source changed and CHANGELOG.md was updated."
+            if echo "$changed" | grep -qx 'docs/CHANGELOG.md'; then
+              echo "✓ Source changed and docs/CHANGELOG.md was updated."
             else
-              echo "::error::Source files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] in the same PR."
+              echo "::error::Source files changed but docs/CHANGELOG.md was not updated. Add an entry under [Unreleased] in the same PR."
               exit 1
             fi
           else

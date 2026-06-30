@@ -170,29 +170,37 @@ export function releaseCalendarSync(
 	now: number = Date.now()
 ): void {
 	const db = getDb();
-	const prev = db
-		.select()
-		.from(calendarSubscriptions)
-		.where(eq(calendarSubscriptions.id, subscriptionId))
-		.get();
-	const consecutiveFailures = result.ok ? 0 : (prev?.consecutiveFailures ?? 0) + 1;
-	const cooldownUntil = result.ok
-		? null
-		: new Date(now + computeBackoffMs(consecutiveFailures, result.status));
-	db.update(calendarSubscriptions)
-		.set({
-			status: result.ok ? 'idle' : 'failed',
-			lockedAt: null,
-			lockedBy: null,
-			lastPolledAt: new Date(now),
-			lastStatus: result.status,
-			lastError: result.error ?? null,
-			consecutiveFailures,
-			cooldownUntil,
-			updatedAt: new Date(now)
-		})
-		.where(eq(calendarSubscriptions.id, subscriptionId))
-		.run();
+	// Read-decide-write in one transaction, and only release if THIS process still
+	// owns the lock. A slow poll whose lock went stale and was reclaimed by a newer
+	// poll must NOT clobber that newer poll's live lock or its breaker state.
+	// Mirrors releaseSyncJob (syncJobsRepository.ts) exactly — the guard was
+	// previously missing here, allowing two concurrent reconciles of one feed.
+	db.transaction((tx) => {
+		const prev = tx
+			.select()
+			.from(calendarSubscriptions)
+			.where(eq(calendarSubscriptions.id, subscriptionId))
+			.get();
+		if (!prev || prev.lockedBy !== INSTANCE_ID) return; // lost the lock; nothing to release
+		const consecutiveFailures = result.ok ? 0 : (prev.consecutiveFailures ?? 0) + 1;
+		const cooldownUntil = result.ok
+			? null
+			: new Date(now + computeBackoffMs(consecutiveFailures, result.status));
+		tx.update(calendarSubscriptions)
+			.set({
+				status: result.ok ? 'idle' : 'failed',
+				lockedAt: null,
+				lockedBy: null,
+				lastPolledAt: new Date(now),
+				lastStatus: result.status,
+				lastError: result.error ?? null,
+				consecutiveFailures,
+				cooldownUntil,
+				updatedAt: new Date(now)
+			})
+			.where(and(eq(calendarSubscriptions.id, subscriptionId), eq(calendarSubscriptions.lockedBy, INSTANCE_ID)))
+			.run();
+	});
 }
 
 export function isCalendarSyncRunning(

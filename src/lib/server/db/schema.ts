@@ -43,17 +43,24 @@ export const users = sqliteTable('users', {
 		.default(sql`(unixepoch() * 1000)`)
 });
 
-export const sessions = sqliteTable('sessions', {
-	id: text('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => users.id, { onDelete: 'cascade' }),
-	sessionTokenHash: text('session_token_hash').notNull().unique(),
-	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-	createdAt: integer('created_at', { mode: 'timestamp_ms' })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`)
-});
+export const sessions = sqliteTable(
+	'sessions',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		sessionTokenHash: text('session_token_hash').notNull().unique(),
+		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(t) => ({
+		// The periodic expired-session sweep deletes WHERE expires_at < now.
+		expiresAtIdx: index('sessions_expires_at_idx').on(t.expiresAt)
+	})
+);
 
 export const sports = ['Bike', 'Run', 'Swim', 'Strength', 'Other'] as const;
 export type Sport = (typeof sports)[number];

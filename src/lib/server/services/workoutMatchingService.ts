@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import type { Sport } from '$lib/server/db/schema';
 import { listPlannedWorkouts } from '$lib/server/services/plannedWorkoutsService';
 import { listActivitiesForUserInTimeRange, getActivityByIdForUser } from '$lib/server/repositories/activitiesRepository';
+import { loadFor } from '$lib/server/services/analytics/load';
 import { listWorkoutLinksForPlannedWorkouts, createWorkoutLink, deleteWorkoutLinkForPlannedWorkout, deleteWorkoutLinksForActivity } from '$lib/server/repositories/workoutLinksRepository';
-import { formatLocalDate } from '$lib/validation/localDate';
+import { localDayKey, dayBoundsFromKey } from '$lib/server/time';
 import { getPlannedWorkoutByIdForUser } from '$lib/server/repositories/plannedWorkoutsRepository';
 
 export type Compliance = {
@@ -36,16 +37,9 @@ export function computeCompliance(input: {
 }
 
 function activityLocalDate(activity: { startTime: Date }): string {
-	return formatLocalDate(new Date(activity.startTime));
-}
-
-function localDayStart(date: string): Date {
-	// date is YYYY-MM-DD; interpret in server-local time (good enough for v0.1).
-	return new Date(`${date}T00:00:00`);
-}
-
-function localDayEnd(date: string): Date {
-	return new Date(`${date}T23:59:59.999`);
+	// Bucket by the app's local day (OPENIBEX_TZ), not the server process zone,
+	// so date+sport auto-match keys line up with the calendar's local dates.
+	return localDayKey(new Date(activity.startTime));
 }
 
 export async function ensureAutoMatchesForRange(input: {
@@ -63,8 +57,8 @@ export async function ensureAutoMatchesForRange(input: {
 
 	const activitiesInRange = await listActivitiesForUserInTimeRange({
 		userId: input.userId,
-		from: localDayStart(input.fromDate),
-		to: localDayEnd(input.toDate)
+		from: dayBoundsFromKey(input.fromDate).from,
+		to: dayBoundsFromKey(input.toDate).to
 	});
 	const filtered = input.sport ? activitiesInRange.filter((a) => a.sport === input.sport) : activitiesInRange;
 
@@ -98,7 +92,7 @@ export async function ensureAutoMatchesForRange(input: {
 			plannedLoad: p.plannedLoad,
 			completedDurationSec: activity.durationSec ?? null,
 			completedDistanceM: activity.distanceM ?? null,
-			completedLoad: activity.loadScore ?? null
+			completedLoad: loadFor(activity, null)
 		});
 
 		await createWorkoutLink({
@@ -115,6 +109,12 @@ export async function ensureAutoMatchesForRange(input: {
 		linkedPlanned.add(p.id);
 		linkedActivities.add(activity.id);
 	}
+}
+
+/** Remove any plan↔activity links for an activity (the "unlink" action on the
+ * activity page), keeping the route off the repository layer. */
+export async function unlinkActivity(userId: string, activityId: string): Promise<void> {
+	await deleteWorkoutLinksForActivity(userId, activityId);
 }
 
 export async function setManualLink(input: { userId: string; plannedWorkoutId: string; activityId: string }): Promise<void> {

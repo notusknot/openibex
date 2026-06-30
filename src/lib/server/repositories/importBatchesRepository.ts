@@ -1,8 +1,38 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
-import { importBatches, type ImportBatchStatus } from '$lib/server/db/schema';
+import { importBatches, importItems, type ImportBatchStatus } from '$lib/server/db/schema';
 
 export type DbImportBatch = typeof importBatches.$inferSelect;
+
+/**
+ * Boot-time recovery. A bulk import has no background worker — it rides the
+ * request/process that started it — so a crash or `docker restart` mid-import
+ * leaves the batch row stuck `processing` forever (and its items mid-flight).
+ * Run once at startup: mark any non-terminal batch `failed` so the UI stops
+ * showing a perpetual "processing", and fail its in-flight items. Returns the
+ * number of batches swept. Idempotent.
+ */
+export function failOrphanedImportBatches(now: Date = new Date()): number {
+	const db = getDb();
+	return db.transaction((tx) => {
+		const orphaned = tx
+			.select({ id: importBatches.id })
+			.from(importBatches)
+			.where(inArray(importBatches.status, ['pending', 'processing']))
+			.all();
+		if (orphaned.length === 0) return 0;
+		const ids = orphaned.map((b) => b.id);
+		tx.update(importBatches)
+			.set({ status: 'failed', completedAt: now, updatedAt: now })
+			.where(inArray(importBatches.id, ids))
+			.run();
+		tx.update(importItems)
+			.set({ status: 'failed', errorMessage: 'Interrupted by a server restart.', updatedAt: now })
+			.where(and(inArray(importItems.batchId, ids), inArray(importItems.status, ['discovered', 'processing'])))
+			.run();
+		return orphaned.length;
+	});
+}
 
 export async function createImportBatch(input: {
 	id: string;

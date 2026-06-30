@@ -9,6 +9,11 @@
  *  `sports` in `$lib/server/db/schema.ts`. */
 export type Sport = 'Swim' | 'Bike' | 'Run' | 'Strength' | 'Other';
 
+/** Runtime sport list for client/route use (dropdowns), so routes don't reach
+ *  into the Drizzle schema module just for the enum. Same order as
+ *  `sports` in `$lib/server/db/schema.ts`; keep the two in sync. */
+export const SPORTS = ['Bike', 'Run', 'Swim', 'Strength', 'Other'] as const;
+
 /** Display key for a sport, used to pick colors / tags / CSS classes. */
 export type SportKey = 'swim' | 'bike' | 'run' | 'other';
 

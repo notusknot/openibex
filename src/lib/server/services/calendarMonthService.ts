@@ -4,7 +4,7 @@ import { listWorkoutLinksForPlannedWorkouts } from '$lib/server/repositories/wor
 import { listPlannedWorkouts } from '$lib/server/services/plannedWorkoutsService';
 import { ensureAutoMatchesForRange } from '$lib/server/services/workoutMatchingService';
 import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
-import { SPORT_DISPLAY } from '$lib/server/sport';
+import { SPORT_DISPLAY } from '$lib/sport';
 import { formatLocalDate as localDateIso, monthEndDate, monthStartDate } from '$lib/validation/localDate';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 

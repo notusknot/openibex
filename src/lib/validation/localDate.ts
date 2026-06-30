@@ -9,6 +9,12 @@ export function isLocalDate(value: string): boolean {
 	if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return false;
 	if (month < 1 || month > 12) return false;
 	if (day < 1 || day > 31) return false;
+	// Reject impossible calendar dates (e.g. 2026-02-31), which would otherwise
+	// silently roll over when turned into a Date and target the wrong day.
+	const dt = new Date(Date.UTC(year, month - 1, day));
+	if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) {
+		return false;
+	}
 	return true;
 }
 

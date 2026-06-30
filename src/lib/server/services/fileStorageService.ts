@@ -5,6 +5,17 @@ import { promisify } from 'node:util';
 import { getEnv } from '$lib/server/env';
 
 const gunzip = promisify(zlib.gunzip);
+const gzip = promisify(zlib.gzip);
+
+/**
+ * Serialize + gzip a parsed stream OFF the main event loop. `zlib.gzip` runs on
+ * the libuv threadpool, so compressing a large stream (up to the 250k-record
+ * cap) doesn't block the single-process server the way `gzipSync` did. Shared by
+ * all three FIT ingestion paths (single upload, bulk import, Garmin sync).
+ */
+export async function gzipJson(value: unknown): Promise<Buffer> {
+	return gzip(JSON.stringify(value));
+}
 
 export function uploadRelativePath(userId: string, sha256: string, ext: string): string {
 	return path.posix.join('uploads', userId, `${sha256}.${ext}`);

@@ -20,7 +20,7 @@ unbypassable gate.**
 |---|---|---|---|
 | **GitHub branch protection** on `main` | No direct push; PR + green CI required to merge | **Mechanical — the real gate** | Only by editing the rule (admins) |
 | **CI · verify** | `pnpm check` + `pnpm test` + `pnpm build` pass | **Mechanical** (gates merge via protection) | — |
-| **CI · changelog** | Source changed ⇒ `CHANGELOG.md` updated (PRs) | **Mechanical** | — |
+| **CI · changelog** | Source changed ⇒ `docs/CHANGELOG.md` updated (PRs) | **Mechanical** | — |
 | **CI · docker-smoke** | Container boots; `/api/health` returns `{"ok":true}` | **Mechanical** | — |
 | `.githooks/pre-commit` | `check` + `test` before a local commit | Local convenience | `git commit --no-verify` |
 | `.claude/` commit-guard | Agent can't commit on `main` or with failing tests | Agent-only | A human committing directly; disabling the hook |
@@ -38,7 +38,7 @@ green PR:
 
 1. **Branch from fresh `main`:** `git checkout main && git pull --ff-only`, then
    `git checkout -b feat/short-name` (prefixes: `feat/ fix/ chore/ docs/ refactor/`).
-2. **Commit small.** Each code change updates `CHANGELOG.md` `[Unreleased]` in the *same* commit;
+2. **Commit small.** Each code change updates `docs/CHANGELOG.md` `[Unreleased]` in the *same* commit;
    if it ships a `ROADMAP.md` item, delete that line in the same commit too. The pre-commit hook
    runs `pnpm check` + `pnpm test` automatically.
 3. **Final gate before the PR:** `pnpm check && pnpm test && pnpm build`.
@@ -77,8 +77,8 @@ the point of everything else in this document.
 
 ## Cutting a release
 
-1. On a release branch, move everything under `[Unreleased]` in `CHANGELOG.md` into a new
+1. On a release branch, move everything under `[Unreleased]` in `docs/CHANGELOG.md` into a new
    `## [x.y.z] - YYYY-MM-DD` block; leave `[Unreleased]` empty.
 2. Bump `version` in `package.json`.
-3. Update the compare links at the bottom of `CHANGELOG.md`.
+3. Update the compare links at the bottom of `docs/CHANGELOG.md`.
 4. Merge via PR, then tag: `git tag vX.Y.Z && git push --tags`.

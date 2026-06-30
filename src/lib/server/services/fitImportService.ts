@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
-import zlib from 'node:zlib';
 
-import { commitActivityWithFile } from '$lib/server/repositories/activitiesRepository';
+import {
+	commitActivityWithFile,
+	getActivityByFingerprintForUser
+} from '$lib/server/repositories/activitiesRepository';
 import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
 import { createImportJob } from '$lib/server/repositories/importJobsRepository';
 import { parseFit } from '$lib/server/parsers/fit/fitParser';
-import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
+import { gzipJson, writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 import {
 	computeActivityStreamMetrics,
@@ -14,9 +16,12 @@ import {
 
 export class DuplicateUploadError extends Error {
 	readonly existingActivityFileId: string;
-	constructor(existingActivityFileId: string) {
+	/** Set when the match was by parsed fingerprint rather than file SHA. */
+	readonly existingActivityId?: string;
+	constructor(existingActivityFileId: string, existingActivityId?: string) {
 		super('Duplicate upload detected.');
 		this.existingActivityFileId = existingActivityFileId;
+		this.existingActivityId = existingActivityId;
 	}
 }
 
@@ -32,6 +37,7 @@ export async function importFitUpload(input: {
 	const sha256 = sha256Hex(input.bytes);
 	const sizeBytes = input.bytes.byteLength;
 
+	// Dedup 1: exact file SHA (a byte-identical re-upload).
 	const existing = await getActivityFileByShaForUser(sha256, input.userId);
 	if (existing) {
 		throw new DuplicateUploadError(existing.id);
@@ -41,15 +47,34 @@ export async function importFitUpload(input: {
 	const importJobId = crypto.randomUUID();
 	const activityId = crypto.randomUUID();
 
-	// Filesystem writes happen first, OUTSIDE the DB transaction (better-sqlite3
+	// Parse BEFORE any filesystem write: a parse failure then throws before
+	// anything touches disk (fully retryable, no orphan), and we have the summary
+	// needed for the fingerprint dedup below.
+	const parsed = await parseFit(input.bytes, input.originalFilename);
+
+	// Dedup 2: parsed fingerprint (sport + start + duration + distance). The bulk
+	// and sync ingestion paths both apply this layer; without it the SAME ride
+	// re-exported as byte-different FIT (a Garmin re-encode) would create a
+	// duplicate activity here, double-counting its load into the PMC. DOMAIN.md
+	// guarantees dedup on all three ingestion paths.
+	const existingByFingerprint = await getActivityByFingerprintForUser({
+		userId: input.userId,
+		sport: parsed.summary.sport,
+		startTime: parsed.summary.startTime,
+		durationSec: parsed.summary.durationSec ?? null,
+		distanceM: parsed.summary.distanceM ?? null
+	});
+	if (existingByFingerprint) {
+		throw new DuplicateUploadError(existingByFingerprint.activityFileId ?? '', existingByFingerprint.id);
+	}
+
+	// Filesystem writes happen OUTSIDE the DB transaction (better-sqlite3
 	// transactions are synchronous and can't await). A crash here leaves only
-	// orphaned blobs on disk, which dedup-by-sha makes harmless on retry; a parse
-	// failure throws before any DB row exists, so the upload stays retryable
+	// orphaned blobs on disk, which dedup-by-sha makes harmless on retry
 	// (previously a half-written activity_file row blocked re-uploading the file).
 	const upload = await writeUploadFile({ userId: input.userId, sha256, ext: 'fit', bytes: input.bytes });
 
-	const parsed = await parseFit(input.bytes, input.originalFilename);
-	const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
+	const gzipBytes = await gzipJson(parsed.stream);
 	const stream = await writeStreamBlob({ activityId, gzipBytes });
 	const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 

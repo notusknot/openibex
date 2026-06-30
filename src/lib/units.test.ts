@@ -54,4 +54,11 @@ describe('units', () => {
 		expect(paceUnit('imperial')).toBe('/mi');
 		expect(paceUnit('metric')).toBe('/km');
 	});
+
+	it('paceLabel carries a rounded second into minutes (no ":60")', () => {
+		// 299.7 s/km rounds to 300 → 5:00, not 4:60.
+		expect(paceLabel(299.7, 'metric')).toBe('5:00');
+		// 59.6 → 1:00.
+		expect(paceLabel(59.6, 'metric')).toBe('1:00');
+	});
 });

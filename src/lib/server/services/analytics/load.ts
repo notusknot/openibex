@@ -42,7 +42,11 @@ export function intensityFactorFor(
 	prefs: ThresholdPrefs | null = null
 ): number | null {
 	if (input.sport === 'Bike') {
-		const w = input.normalizedPowerLikeW ?? input.avgPowerW;
+		// Prefer a POSITIVE normalized-power value; a stored 0 (not null) must not
+		// shadow a valid avg power via `??` and drop the ride to the duration-only
+		// fallback.
+		const np = input.normalizedPowerLikeW;
+		const w = np && np > 0 ? np : input.avgPowerW;
 		if (w && w > 0) {
 			const ftp = prefs?.ftpWatts ?? DEFAULT_FTP;
 			if (ftp > 0) return w / ftp;

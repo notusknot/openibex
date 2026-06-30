@@ -22,8 +22,9 @@ import {
 	upsertActivityStreamMetrics
 } from '$lib/server/repositories/activityStreamMetricsRepository';
 import { readStreamBlob } from '$lib/server/services/fileStorageService';
+import { startOfLocalDay } from '$lib/server/time';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_DISPLAY } from '$lib/server/sport';
+import { SPORT_DISPLAY } from '$lib/sport';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES } from '$lib/zones';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 
@@ -93,12 +94,6 @@ export type DashboardData = {
 	recent: ActivityListRow[];
 	hasData: boolean;
 };
-
-function startOfLocalDay(d: Date): Date {
-	const out = new Date(d);
-	out.setHours(0, 0, 0, 0);
-	return out;
-}
 
 function localDayIndex(activityDate: Date, windowStart: Date): number {
 	const start = startOfLocalDay(windowStart).getTime();
@@ -312,9 +307,16 @@ async function resolveStreamMetrics(
 		}
 	}
 
-	if (stale.length > 0) {
+	// Heal stale/missing rows with BOUNDED concurrency. Each heal reads +
+	// gunzips + re-aggregates a multi-MB stream blob; an unbounded Promise.all
+	// over a whole stale window (after a STREAM_METRICS_VERSION bump, or on a
+	// fresh clone before the backfill CLI runs) would read hundreds of MB at once
+	// and stall the dashboard. The steady state has zero stale rows, so this loop
+	// is skipped entirely.
+	const HEAL_CONCURRENCY = 4;
+	for (let i = 0; i < stale.length; i += HEAL_CONCURRENCY) {
 		await Promise.all(
-			stale.map(async (a) => {
+			stale.slice(i, i + HEAL_CONCURRENCY).map(async (a) => {
 				try {
 					const metrics = computeActivityStreamMetrics(await readStreamBlob(a.id));
 					out.set(a.id, metrics);
@@ -462,9 +464,13 @@ export async function getDashboardData(
 	const sd7Raw = Math.sqrt(
 		l7.reduce((acc, v) => acc + (v - mean7) * (v - mean7), 0) / Math.max(1, l7.length)
 	);
-	const sd7 = sd7Raw || 1;
-	const monotonyN = mean7 / sd7;
-	const strainN = Math.round(l7.reduce((acc, v) => acc + v, 0) * monotonyN);
+	// Monotony (Foster) = mean/sd. sd == 0 means no day-to-day variation, where the
+	// ratio is undefined; the old `sd || 1` substituted 1, turning monotony into
+	// the raw mean and exploding strain (mean × weekly load) into a meaningless
+	// figure. Treat the degenerate case as undefined ('—') instead.
+	const weekSum = l7.reduce((acc, v) => acc + v, 0);
+	const monotonyN = sd7Raw > 0 ? mean7 / sd7Raw : NaN;
+	const strainN = Number.isFinite(monotonyN) ? Math.round(weekSum * monotonyN) : 0;
 	const readinessVal = Math.max(3, Math.min(100, Math.round(50 + last.tsb * 1.6)));
 
 	const kpis: DashboardKpis = {

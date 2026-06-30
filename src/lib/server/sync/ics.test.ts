@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertSafePublicUrl, parseIcsEvents } from './ics';
+import { assertSafePublicUrl, parseIcsEvents, resolveSafeFeedTarget } from './ics';
 
 // Window wide enough to include every fixture event (all in 2026).
 const WIDE = {
@@ -151,5 +151,17 @@ describe('assertSafePublicUrl (SSRF guard)', () => {
 	it('accepts a public IP literal', async () => {
 		// IP literal → no DNS; 93.184.x is public, so it passes the guard.
 		await expect(assertSafePublicUrl('https://93.184.216.34/feed.ics')).resolves.toBeInstanceOf(URL);
+	});
+});
+
+describe('resolveSafeFeedTarget (pin source for the fetcher)', () => {
+	it('returns the validated public IP so the connection can be pinned to it', async () => {
+		const { url, addresses } = await resolveSafeFeedTarget('https://93.184.216.34/feed.ics');
+		expect(url).toBeInstanceOf(URL);
+		expect(addresses).toEqual(['93.184.216.34']);
+	});
+
+	it('rejects a private target without leaking an address to pin', async () => {
+		await expect(resolveSafeFeedTarget('https://10.0.0.5/x')).rejects.toThrow();
 	});
 });

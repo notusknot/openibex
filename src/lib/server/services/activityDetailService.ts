@@ -21,7 +21,7 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/server/sport';
+import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/sport';
 import type { ActivityTrack, TrackPoint } from '$lib/track';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES, hrZoneIndex } from '$lib/zones';
 import type { UserPreferences } from '$lib/validation/userPreferences';
@@ -87,6 +87,16 @@ function asFiniteNumber(v: unknown): number | null {
 	if (v === null || v === undefined) return null;
 	const n = typeof v === 'number' ? v : Number(v);
 	return Number.isFinite(n) ? n : null;
+}
+
+// Max of a numeric array via a loop, NOT `Math.max(...arr)`. A long activity can
+// hold up to MAX_STREAM_RECORDS (250k) HR samples, and spreading that many args
+// overflows the call stack (`RangeError: Maximum call stack size exceeded`),
+// 500-ing the detail page. Callers guard against empty input.
+function maxOf(arr: number[]): number {
+	let m = -Infinity;
+	for (const v of arr) if (v > m) m = v;
+	return m;
 }
 
 function asDate(v: unknown): Date | null {
@@ -165,7 +175,7 @@ function lapShortLabel(lap: Record<string, unknown>, index: number, totalActiveS
 
 export function computeHrZones(hrSamples: number[], maxHrHint: number | null): ActivityHrZone[] {
 	if (hrSamples.length === 0) return [];
-	const maxRef = maxHrHint && maxHrHint > 100 ? maxHrHint : Math.max(...hrSamples);
+	const maxRef = maxHrHint && maxHrHint > 100 ? maxHrHint : maxOf(hrSamples);
 	if (!Number.isFinite(maxRef) || maxRef <= 0) return [];
 	const counts = [0, 0, 0, 0, 0];
 	for (const hr of hrSamples) {
@@ -211,6 +221,11 @@ export async function getActivityDetail(input: {
 	if (!activity) return null;
 	const prefs = input.prefs ?? null;
 	const units: Units = prefs?.units ?? 'imperial';
+	// Prefer the athlete's configured max HR as the zone reference, matching the
+	// dashboard's time-in-zone card — otherwise the same activity bucketed against
+	// its own sample max here and against prefs.maxHrBpm there, showing different
+	// zone distributions on the two views.
+	const userMaxHr = prefs?.maxHrBpm && prefs.maxHrBpm > 100 ? prefs.maxHrBpm : null;
 
 	const [fileRow, link, streamRaw] = await Promise.all([
 		activity.activityFileId
@@ -308,7 +323,7 @@ export async function getActivityDetail(input: {
 	// Max-HR reference (same basis as the zone histogram), so the map can bucket
 	// points into HR zones client-side.
 	const maxHrCandidate =
-		activity.maxHr && activity.maxHr > 100 ? activity.maxHr : rawHr.length ? Math.max(...rawHr) : 0;
+		userMaxHr ?? (activity.maxHr && activity.maxHr > 100 ? activity.maxHr : rawHr.length ? maxOf(rawHr) : 0);
 	const maxHrRef = Number.isFinite(maxHrCandidate) && maxHrCandidate > 0 ? maxHrCandidate : null;
 
 	// Shared point array driving BOTH the route map and the time-series charts.
@@ -368,7 +383,7 @@ export async function getActivityDetail(input: {
 	});
 
 	// HR zones
-	const hrZones = computeHrZones(rawHr, activity.maxHr ?? null);
+	const hrZones = computeHrZones(rawHr, userMaxHr ?? activity.maxHr ?? null);
 
 	// Peak efforts
 	const peaks: ActivityPeak[] = [];
@@ -384,7 +399,7 @@ export async function getActivityDetail(input: {
 	if (activity.maxHr) {
 		peaks.push({ label: 'Max HR', val: `${Math.round(activity.maxHr)} bpm` });
 	} else if (rawHr.length > 0) {
-		peaks.push({ label: 'Max HR', val: `${Math.round(Math.max(...rawHr))} bpm` });
+		peaks.push({ label: 'Max HR', val: `${Math.round(maxOf(rawHr))} bpm` });
 	}
 
 	// Summary stat bar (8 cells)
@@ -487,6 +502,16 @@ export async function getActivityDetail(input: {
 		hrZones,
 		peaks
 	};
+}
+
+/** Resolve an activity file the user owns, for the download endpoint — so the
+ * route goes through a service rather than the repository directly. Returns null
+ * (→ 404) when the file doesn't exist or belongs to another user. */
+export async function getActivityFileForDownload(
+	userId: string,
+	fileId: string
+): Promise<DbActivityFile | undefined> {
+	return getActivityFileByIdForUser(fileId, userId);
 }
 
 /**

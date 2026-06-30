@@ -14,7 +14,7 @@ Start here:
   invariants.
 - **[docs/development.md](docs/development.md)** — branch protection and where enforcement actually
   lives (CI vs. local hooks).
-- **[CHANGELOG.md](CHANGELOG.md)** — what has shipped. **[ROADMAP.md](ROADMAP.md)** — what is
+- **[CHANGELOG.md](docs/CHANGELOG.md)** — what has shipped. **[ROADMAP.md](docs/ROADMAP.md)** — what is
   planned (and the rule that shipped work moves from ROADMAP into CHANGELOG).
 
 Historical, non-authoritative material is under `docs/archive/` — do not treat it as current.

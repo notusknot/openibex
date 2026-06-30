@@ -1,10 +1,17 @@
 import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
-import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
+import {
+	getUserFromSessionToken,
+	SESSION_COOKIE_NAME,
+	sessionCookieSecure,
+	startSessionSweep
+} from '$lib/server/services/authService';
 import { registerShutdownHandlers } from '$lib/server/shutdown';
-import { validateConfigOrThrow } from '$lib/server/env';
+import { getEnv, validateConfigOrThrow } from '$lib/server/env';
 import { warnIfSyncKeyMisconfigured } from '$lib/server/sync/keyCheck';
+import { failOrphanedImportBatches } from '$lib/server/repositories/importBatchesRepository';
+import { getLogger } from '$lib/server/logger';
 
 // Runs once when the server module loads. Fail fast on missing/invalid config,
 // then install handlers that drain in-flight writes + checkpoint the WAL + close
@@ -12,6 +19,26 @@ import { warnIfSyncKeyMisconfigured } from '$lib/server/sync/keyCheck';
 // (the test runner imports this module before any per-test env is set up).
 if (!process.env.VITEST) {
 	validateConfigOrThrow();
+	// Loud warning if a production deployment can't mark the session cookie Secure
+	// (ORIGIN isn't https) — fine on a trusted network like Tailscale, dangerous
+	// if exposed publicly over plain HTTP.
+	if (getEnv().isProduction && !sessionCookieSecure()) {
+		getLogger().warn(
+			'Session cookie is NOT marked Secure (ORIGIN is not https://). This is safe only on a trusted network (e.g. Tailscale). Put TLS in front and set ORIGIN=https://… before exposing OpenIbex publicly.'
+		);
+	}
+	// Recover any bulk import left mid-flight by a crash/restart (no background
+	// worker — the import rides its originating process), so the UI never shows a
+	// perpetual "processing".
+	try {
+		const swept = failOrphanedImportBatches();
+		if (swept > 0) getLogger().warn({ swept }, 'boot: marked interrupted import batches failed');
+	} catch (err) {
+		getLogger().error({ err }, 'boot: import-batch sweep failed');
+	}
+	// Periodically GC expired sessions off the request path (was a per-request
+	// full DELETE). Timer is unref'd so it never delays shutdown.
+	startSessionSweep();
 	// Loud (but non-fatal) warning if stored Garmin credentials can't be
 	// decrypted with the current SYNC_ENCRYPTION_KEY. Fire-and-forget so it
 	// never delays boot; experimental sync must not gate the whole app.

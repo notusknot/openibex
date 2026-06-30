@@ -98,6 +98,18 @@ capability and the patch version for fixes; breaking changes may land in a minor
   committing on `main` or with failing tests.
 
 ### Changed
+- **CI changelog gate follows the changelog to `docs/`.** `CHANGELOG.md` (and `ROADMAP.md`) moved
+  under `docs/`; the CI `changelog` job and `docs/development.md` now check/reference
+  `docs/CHANGELOG.md` instead of the old repo-root path, so the "source changed ⇒ changelog updated"
+  gate works again.
+- **Several routes moved back onto the route → service → repository path.** The imports list/detail
+  pages, the activity-file download endpoint, the activity "unlink" action, and the new-planned-
+  workout page reached into repositories (or the Drizzle schema) directly, bypassing the service
+  layer the architecture relies on (and that a future Go API would hang off). They now go through a
+  small `importsService` / existing services, and the sport list for dropdowns comes from a shared
+  `$lib/sport` `SPORTS` const instead of the schema module. (The settings page and the planned-
+  workout *edit* page still hold this coupling — both mix real logic into the route and need a proper
+  service extraction rather than thin pass-throughs; left as a focused follow-up.)
 - **Fonts are self-hosted (Fontsource) instead of loaded from Google Fonts.** The Google Fonts
   `<link>` + `preconnect`s in `app.html` are gone; Archivo and JetBrains Mono now ship from the
   app's own origin via `@fontsource/*`, imported in the root layout. Only the **latin subset** and
@@ -152,6 +164,81 @@ capability and the patch version for fixes; breaking changes may land in a minor
   CLI, and the dead route/API code.
 
 ### Fixed
+- **Activity day bucketing now follows the athlete's timezone, not the server's** — dashboard
+  daily/weekly load, the sport split, and calendar auto-match computed each activity's *local* day
+  with the server process clock, so on a UTC-deployed container a UTC-7 athlete's evening workout
+  drifted to the next day (wrong daily TSS cell, wrong week, failed plan match). A new
+  `OPENIBEX_TZ` setting (an IANA zone, e.g. `America/Los_Angeles`) makes the app's local day explicit
+  via a shared, tested helper (`src/lib/server/time.ts`); when unset, behavior is unchanged (server
+  zone). The browser already formats dates in the athlete's own zone, so only server-side bucketing
+  needed the fix.
+- **The activity detail page no longer crashes on very long activities** — max-HR was computed with
+  `Math.max(...rawHr)`, spreading every HR sample (up to the 250k-record stream cap) as call
+  arguments, which overflows the stack (`RangeError`) and 500s the page for ultras/long rides. Now
+  computed with a loop.
+- **Interrupted bulk imports no longer hang on "processing" forever** — a Garmin-export web import
+  runs in the background on the process that started it (there is no worker), so a crash or
+  `docker restart` mid-import left the batch row stuck `processing`. The import is now registered as
+  critical work so graceful shutdown waits for it, and a boot-time sweep marks any batch left
+  mid-flight `failed` (and fails its in-flight items) so the Imports log reflects reality.
+- **Single-file uploads now dedupe by parsed fingerprint, not just file SHA** — re-uploading the same
+  ride re-exported to byte-different FIT (a Garmin re-encode) created a duplicate activity that
+  double-counted its load into the PMC. The single-upload path now applies the same
+  sport+start+duration+distance fingerprint check the bulk-import and sync paths use, matching
+  DOMAIN.md's dedup guarantee. (Parsing now also runs before any file write, so a parse failure
+  leaves nothing on disk.)
+- **Calendar-feed lock release is now atomic and ownership-checked** — `releaseCalendarSync` did a
+  bare read-then-write with no transaction and no `lockedBy` guard (unlike its sibling
+  `releaseSyncJob`), so a slow poll whose lock had gone stale and been reclaimed could clobber the
+  newer poll's live lock and corrupt its circuit-breaker state, allowing two concurrent reconciles of
+  one feed. It now mirrors `releaseSyncJob` exactly (transaction + owner check).
+- **Expired sessions are GC'd on a timer, not on every request** — `getUserFromSessionToken`
+  (called from the auth hook for every request with a session cookie) ran a full
+  `DELETE FROM sessions WHERE expires_at < now` each time, turning every authenticated navigation
+  into a write transaction (and WAL growth) on single-writer SQLite. The per-session expiry check
+  still rejects + deletes an expired hit immediately (correctness unchanged); bulk cleanup now runs
+  on an `unref`'d hourly interval. Added an index on `sessions.expires_at` so the sweep is not a
+  full scan (migration `0015`).
+- **The dashboard no longer reads the whole stream window at once** — when per-activity stream
+  metrics are missing or stale (a `STREAM_METRICS_VERSION` bump, or a fresh clone before the backfill
+  CLI runs) the dashboard heals them by reading + decompressing each stream blob. This was an
+  unbounded `Promise.all`, so the first load could read hundreds of MB concurrently and stall. It is
+  now bounded to 4 in flight (steady state still does zero stream reads).
+- **Stream compression no longer blocks the event loop** — all three FIT ingestion paths (single
+  upload, bulk import, Garmin sync) compressed the parsed stream with synchronous `zlib.gzipSync`
+  (tens of MB of JSON for a long activity, hundreds of ms of main-thread CPU, serialized during a
+  backfill). They now use async `zlib.gzip` (libuv threadpool) via a shared `gzipJson` helper.
+- **Zip extraction is bounded against zip bombs** — the Garmin-export importer capped only the
+  *compressed* archive (1 GiB) and buffered each entry fully in memory; a crafted archive could
+  inflate to many GB and OOM the box. Entries are now streamed to disk with per-entry (1 GiB) and
+  whole-archive (8 GiB) decompressed caps that abort the moment they're exceeded — generous for any
+  real export, fatal to a bomb.
+- **The app-rail season summary is cached briefly** — it is loaded by the shared layout on every
+  navigation (an 84-day scan + count + reduce, duplicating the dashboard's own query on the
+  dashboard). A 20-second in-memory cache, keyed on the prefs that affect the numbers, collapses
+  rapid navigations into one query; a settings change is reflected immediately, only newly-imported
+  activities lag for at most the TTL.
+- **HR zones now match between the dashboard and the activity detail page** — the detail page
+  bucketed HR against the activity's own max while the dashboard preferred the athlete's configured
+  max HR, so the same activity showed two different zone distributions. The detail page now also
+  prefers `prefs.maxHrBpm`.
+- **Strain/monotony no longer explode on a perfectly even week** — monotony (`mean/sd`) guarded a
+  zero standard deviation with `sd || 1`, turning a week of equal daily loads into `monotony = mean`
+  and a meaningless strain. The degenerate (no-variation) case now reads as undefined (`—`).
+- **Workout `loadCompliance` is computed again** — it read the raw `loadScore` field, which no
+  import path populates, so it was always blank. It now uses the shared `loadFor` (the same
+  training-load figure used everywhere else).
+- **A recorded normalized-power of 0 no longer drops a ride to the duration-only load estimate** —
+  `normalizedPowerLikeW ?? avgPowerW` let a stored `0` shadow a valid average power; it now prefers a
+  positive value.
+- **Pace labels no longer render `:60`** — a fractional pace at a minute boundary (e.g. 4:59.7)
+  rounded the seconds alone to `:60`; the total is now rounded before splitting (→ `5:00`).
+- **Impossible calendar dates are rejected** — `isLocalDate` accepted any day 1–31 for any month
+  (e.g. `2026-02-31`), which later rolled silently to the wrong day; it now validates a real date.
+- **Docs + cleanup:** corrected stale `CLAUDE.md` references (the removed `/analytics` page +
+  `api/analytics` endpoint, the `analytics:rebuild` → `metrics:rebuild` command, and the obsolete
+  "two PMC code paths" note — there is one). Removed the no-op `src/lib/server/sport.ts` re-export
+  shim (callers import `$lib/sport` directly). Documented the new `OPENIBEX_TZ` in `.env.example`.
 - **A missing or rotated `SYNC_ENCRYPTION_KEY` now fails loudly instead of silently.** If stored
   Garmin credentials exist but can't be decrypted with the current key (key missing, changed, or
   rotated), the app logs a clear error at startup explaining sync will keep failing and how to fix it
@@ -182,6 +269,23 @@ capability and the patch version for fixes; breaking changes may land in a minor
   dragged smoothly across them instead of only responding to discrete taps. They use Pointer Events
   with `touch-action: pan-y` (vertical page scroll still works) and pointer capture, replacing the
   mouse-only `mousemove` handler.
+
+### Security
+- **Production config now fails safe instead of fails open** — security gating keyed off
+  `NODE_ENV === 'production'`, but `node build` (a bare `pnpm start`) sets no `NODE_ENV`, so a
+  self-hoster who didn't export it silently ran in development mode: `SESSION_SECRET` and `ORIGIN`
+  became optional, session HMACs fell back to a hardcoded public constant, and cookies weren't
+  Secure — with no warning. The app now treats an unset environment as **production** (dev/test must
+  be explicit), so it refuses to boot without a real `SESSION_SECRET`/`ORIGIN`, and never uses the
+  dev secret outside an explicitly-dev run. It also logs a loud warning when a production deployment
+  can't mark the session cookie Secure (`ORIGIN` not `https://`). **Action for existing
+  deployments:** set `OPENIBEX_ENV=development` for local non-prod runs, or provide
+  `SESSION_SECRET` + `ORIGIN` (you should already have these in production).
+- **Calendar-feed fetch now pins DNS to the validated IP** — the SSRF guard resolved + checked the
+  feed host, then `fetch` re-resolved independently, leaving a DNS-rebinding window to reach an
+  internal HTTPS service. The fetch now connects only to the exact IP the guard approved (via a
+  pinned `lookup` over `node:https`), re-validated and re-pinned on every redirect hop; TLS still
+  verifies against the real hostname.
 
 ## [0.2.0] - 2026-06-24
 
