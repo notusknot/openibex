@@ -98,6 +98,10 @@ capability and the patch version for fixes; breaking changes may land in a minor
   committing on `main` or with failing tests.
 
 ### Changed
+- **CI changelog gate follows the changelog to `docs/`.** `CHANGELOG.md` (and `ROADMAP.md`) moved
+  under `docs/`; the CI `changelog` job and `docs/development.md` now check/reference
+  `docs/CHANGELOG.md` instead of the old repo-root path, so the "source changed ⇒ changelog updated"
+  gate works again.
 - **Several routes moved back onto the route → service → repository path.** The imports list/detail
   pages, the activity-file download endpoint, the activity "unlink" action, and the new-planned-
   workout page reached into repositories (or the Drizzle schema) directly, bypassing the service
