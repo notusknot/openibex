@@ -81,11 +81,14 @@ The same applies to nginx/Traefik/etc. — proxy to `127.0.0.1:3000`, terminate
 TLS at the proxy, and keep the app port off the public network (no
 `openFirewall` needed when the proxy is on the same host).
 
-> **Large FIT uploads:** adapter-node caps request bodies at 512&nbsp;KB by
-> default, and some proxies add their own cap (nginx defaults to 1&nbsp;MB;
-> Caddy has none). A long activity's FIT file can exceed that. Raise the app's
-> limit with `services.openibex.settings.BODY_SIZE_LIMIT = "100M";` and lift the
-> proxy's cap to match if it has one.
+> **Large FIT / export uploads:** adapter-node caps request bodies at
+> 512&nbsp;KB by default, and some proxies add their own cap (nginx defaults to
+> 1&nbsp;MB; Caddy has none). A long activity's FIT file can exceed that, and the
+> **Settings → Import Garmin export** bulk upload (a whole "Export Your Data"
+> archive) is far larger still. Raise the app's limit with
+> `services.openibex.settings.BODY_SIZE_LIMIT = "1G";` and lift the proxy's cap
+> to match if it has one. (The CLI `pnpm import:garmin` reads straight from disk
+> and is unaffected by this limit.)
 
 ### Direct access (no proxy)
 

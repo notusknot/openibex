@@ -52,7 +52,8 @@
 			</div>
 			<div class="empty-main">No imports yet</div>
 			<div class="empty-sub oi-mono">
-				Bulk-import a Garmin export from the project root:
+				Bulk-import a Garmin export from <a class="empty-link" href="/settings#import">Settings → Import Garmin export</a>,
+				or from the project root:
 			</div>
 			<code class="code">pnpm import:garmin -- --user you@example.com --path /path/to/export</code>
 		</div>
@@ -136,6 +137,14 @@
 	.empty-sub {
 		font-size: 11px;
 		color: var(--faint);
+	}
+	.empty-link {
+		color: var(--green);
+		text-decoration: none;
+		font-weight: 600;
+	}
+	.empty-link:hover {
+		text-decoration: underline;
 	}
 	.code {
 		font-family: 'JetBrains Mono', ui-monospace, monospace;

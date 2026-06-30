@@ -25,6 +25,10 @@ import {
 	setCalendarSubscriptionEnabled
 } from '$lib/server/repositories/calendarSubscriptionsRepository';
 import { parseCalendarSubscriptionForm } from '$lib/validation/calendarSubscription';
+import {
+	GARMIN_WEB_IMPORT_MAX_BYTES,
+	startGarminExportImport
+} from '$lib/server/services/imports/garminWebImportService';
 import { getLogger } from '$lib/server/logger';
 
 /** A short human notice for a calendar sync result, e.g. "3 added · 1 updated". */
@@ -161,6 +165,56 @@ export const actions: Actions = {
 			return fail(400, { garminError: `Sync failed: ${result.error ?? 'unknown error'}` });
 		}
 		return { garminSync: { imported: result.imported, duplicate: result.duplicate, unsupported: result.unsupported, failed: result.failed } };
+	},
+
+	// Bulk-import a full Garmin "Export Your Data" archive (the same job the
+	// `pnpm import:garmin` CLI runs). Accepts the export .zip, kicks the import
+	// off in the background, and redirects to the batch's import log.
+	importGarminExport: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+
+		const form = await request.formData();
+		const file = form.get('file');
+		if (!(file instanceof File)) {
+			return fail(400, { importError: 'Choose your Garmin export .zip file.' });
+		}
+
+		const name = file.name || 'garmin-export.zip';
+		if (!name.toLowerCase().endsWith('.zip')) {
+			return fail(400, {
+				importError: 'Upload the .zip you downloaded from Garmin (Account → Export Your Data).'
+			});
+		}
+		if (file.size <= 0) {
+			return fail(400, { importError: 'That file is empty.' });
+		}
+		if (file.size > GARMIN_WEB_IMPORT_MAX_BYTES) {
+			return fail(400, {
+				importError: `That file is too large (max ${Math.round(GARMIN_WEB_IMPORT_MAX_BYTES / (1024 * 1024))} MB).`
+			});
+		}
+
+		const bytes = new Uint8Array(await file.arrayBuffer());
+
+		let batchId: string;
+		try {
+			({ batchId } = await startGarminExportImport({
+				userId: locals.user.id,
+				userEmail: locals.user.email,
+				originalName: name,
+				zipBytes: bytes
+			}));
+		} catch (err) {
+			getLogger().error(
+				{ detail: err instanceof Error ? err.message : 'unknown error' },
+				'failed to start garmin bulk import'
+			);
+			return fail(400, { importError: 'Could not start the import. Please try again.' });
+		}
+
+		// Land on the batch's log so progress (parsed / imported / duplicate /
+		// failed) streams in as the background job runs.
+		throw redirect(303, `/imports/${batchId}`);
 	},
 
 	// ── Experimental calendar (ICS) subscriptions ────────────────────────────
