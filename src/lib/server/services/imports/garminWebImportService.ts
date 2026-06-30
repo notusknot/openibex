@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { getLogger } from '$lib/server/logger';
+import { beginCriticalWork, endCriticalWork } from '$lib/server/shutdown';
 import {
 	createImportBatch,
 	updateImportBatchProgress
@@ -91,30 +92,38 @@ export async function startGarminExportImport(input: {
 		startedAt: new Date()
 	});
 
+	// Register as critical work so graceful shutdown's drain() waits for it (up to
+	// its timeout) before checkpointing + closing the DB. Without this, a SIGTERM
+	// mid-import closed the connection underneath the running job. The boot-time
+	// sweep (failOrphanedImportBatches) is the backstop for an import that outlives
+	// the drain window or a hard kill.
+	beginCriticalWork();
 	void processGarminExportZip({
 		userEmail: input.userEmail,
 		batchId,
 		workDir,
 		zipPath
-	}).catch(async (err) => {
-		getLogger().error(
-			{ batchId, detail: err instanceof Error ? err.message : 'unknown error' },
-			'web garmin bulk import failed'
-		);
-		// `importGarminHistoricalExport` marks the batch failed on errors it
-		// reaches, but a failure before that (e.g. a corrupt zip) wouldn't — so
-		// flag it here too. Double-marking is an idempotent no-op.
-		try {
-			await updateImportBatchProgress({
-				id: batchId,
-				userId: input.userId,
-				status: 'failed',
-				completedAt: new Date()
-			});
-		} catch {
-			/* best effort */
-		}
-	});
+	})
+		.catch(async (err) => {
+			getLogger().error(
+				{ batchId, detail: err instanceof Error ? err.message : 'unknown error' },
+				'web garmin bulk import failed'
+			);
+			// `importGarminHistoricalExport` marks the batch failed on errors it
+			// reaches, but a failure before that (e.g. a corrupt zip) wouldn't — so
+			// flag it here too. Double-marking is an idempotent no-op.
+			try {
+				await updateImportBatchProgress({
+					id: batchId,
+					userId: input.userId,
+					status: 'failed',
+					completedAt: new Date()
+				});
+			} catch {
+				/* best effort */
+			}
+		})
+		.finally(() => endCriticalWork());
 
 	return { batchId };
 }

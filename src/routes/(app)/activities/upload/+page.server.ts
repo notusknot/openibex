@@ -41,7 +41,7 @@ export const actions: Actions = {
 			throw redirect(303, `/activities/${result.activityId}`);
 		} catch (err) {
 			if (err instanceof DuplicateUploadError) {
-				return fail(400, { error: 'Duplicate upload detected (same SHA-256).' });
+				return fail(400, { error: 'This activity is already in your library.' });
 			}
 			const message = err instanceof Error ? err.message : 'Import failed.';
 			return fail(400, { error: message });

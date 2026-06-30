@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
+import { dayBoundsFromKey } from '$lib/server/time';
 import { activities, activityFiles, activityStreamMetrics, type Sport } from '$lib/server/db/schema';
 import {
 	activityFileValues,
@@ -251,11 +252,10 @@ export async function updateActivityTitleForUser(input: {
 
 export async function listActivitiesForUserOnDateAndSport(input: {
 	userId: string;
-	date: string; // YYYY-MM-DD (interpreted in server-local time)
+	date: string; // YYYY-MM-DD (interpreted in the app's local zone, OPENIBEX_TZ)
 	sport: Sport;
 }): Promise<DbActivity[]> {
-	const from = new Date(`${input.date}T00:00:00`);
-	const to = new Date(`${input.date}T23:59:59.999`);
+	const { from, to } = dayBoundsFromKey(input.date);
 	const db = getDb();
 	return db
 		.select()

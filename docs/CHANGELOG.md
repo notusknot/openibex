@@ -152,6 +152,34 @@ capability and the patch version for fixes; breaking changes may land in a minor
   CLI, and the dead route/API code.
 
 ### Fixed
+- **Activity day bucketing now follows the athlete's timezone, not the server's** — dashboard
+  daily/weekly load, the sport split, and calendar auto-match computed each activity's *local* day
+  with the server process clock, so on a UTC-deployed container a UTC-7 athlete's evening workout
+  drifted to the next day (wrong daily TSS cell, wrong week, failed plan match). A new
+  `OPENIBEX_TZ` setting (an IANA zone, e.g. `America/Los_Angeles`) makes the app's local day explicit
+  via a shared, tested helper (`src/lib/server/time.ts`); when unset, behavior is unchanged (server
+  zone). The browser already formats dates in the athlete's own zone, so only server-side bucketing
+  needed the fix.
+- **The activity detail page no longer crashes on very long activities** — max-HR was computed with
+  `Math.max(...rawHr)`, spreading every HR sample (up to the 250k-record stream cap) as call
+  arguments, which overflows the stack (`RangeError`) and 500s the page for ultras/long rides. Now
+  computed with a loop.
+- **Interrupted bulk imports no longer hang on "processing" forever** — a Garmin-export web import
+  runs in the background on the process that started it (there is no worker), so a crash or
+  `docker restart` mid-import left the batch row stuck `processing`. The import is now registered as
+  critical work so graceful shutdown waits for it, and a boot-time sweep marks any batch left
+  mid-flight `failed` (and fails its in-flight items) so the Imports log reflects reality.
+- **Single-file uploads now dedupe by parsed fingerprint, not just file SHA** — re-uploading the same
+  ride re-exported to byte-different FIT (a Garmin re-encode) created a duplicate activity that
+  double-counted its load into the PMC. The single-upload path now applies the same
+  sport+start+duration+distance fingerprint check the bulk-import and sync paths use, matching
+  DOMAIN.md's dedup guarantee. (Parsing now also runs before any file write, so a parse failure
+  leaves nothing on disk.)
+- **Calendar-feed lock release is now atomic and ownership-checked** — `releaseCalendarSync` did a
+  bare read-then-write with no transaction and no `lockedBy` guard (unlike its sibling
+  `releaseSyncJob`), so a slow poll whose lock had gone stale and been reclaimed could clobber the
+  newer poll's live lock and corrupt its circuit-breaker state, allowing two concurrent reconciles of
+  one feed. It now mirrors `releaseSyncJob` exactly (transaction + owner check).
 - **A missing or rotated `SYNC_ENCRYPTION_KEY` now fails loudly instead of silently.** If stored
   Garmin credentials exist but can't be decrypted with the current key (key missing, changed, or
   rotated), the app logs a clear error at startup explaining sync will keep failing and how to fix it

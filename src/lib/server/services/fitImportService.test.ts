@@ -103,4 +103,23 @@ describe('fitImportService', () => {
 			DuplicateUploadError
 		);
 	});
+
+	it('duplicate detected by parsed fingerprint even when bytes (sha) differ', async () => {
+		// The mock parseFit returns the same summary for any bytes, so these two
+		// byte-different uploads share a fingerprint (sport+start+duration+distance)
+		// — the case where a Garmin re-encode of one ride must NOT create a second
+		// activity. Before this fix the single-upload path only deduped by file SHA.
+		const { user } = await registerWithEmailPassword({ email: 'u3@example.com', password: 'password123' });
+		const first = await importFitUpload({
+			userId: user.id,
+			originalFilename: 'ride.fit',
+			bytes: new Uint8Array([1, 2, 3, 4])
+		});
+		await expect(
+			importFitUpload({ userId: user.id, originalFilename: 'ride-reexport.fit', bytes: new Uint8Array([5, 6, 7, 8, 9]) })
+		).rejects.toMatchObject({ existingActivityId: first.activityId });
+
+		// And only one activity exists.
+		expect(getDb().select().from(activities).all().length).toBe(1);
+	});
 });

@@ -15,6 +15,10 @@ export type OpenIbexEnv = {
 	OPENIBEX_IMPORT_DIR: string;
 	OPENIBEX_ENV: string;
 	NODE_ENV: string;
+	// IANA timezone (e.g. "America/Los_Angeles") for the app's LOCAL day, used by
+	// the dashboard/calendar to bucket activities. Unset → the server process
+	// zone (correct only when the container clock matches the athlete's zone).
+	OPENIBEX_TZ?: string;
 	OPEN_REGISTRATION: boolean;
 	SESSION_SECRET?: string;
 	SESSION_TTL_DAYS: number;
@@ -77,6 +81,7 @@ export function getEnv(): OpenIbexEnv {
 		OPENIBEX_IMPORT_DIR: readEnv('OPENIBEX_IMPORT_DIR') ?? path.join(dataDir, 'imports'),
 		OPENIBEX_ENV: readEnv('OPENIBEX_ENV') ?? 'development',
 		NODE_ENV: readEnv('NODE_ENV') ?? 'development',
+		OPENIBEX_TZ: readEnv('OPENIBEX_TZ'),
 		OPEN_REGISTRATION: openRegistration,
 		SESSION_SECRET: readEnv('SESSION_SECRET'),
 		SESSION_TTL_DAYS: sessionTtlDays,
@@ -108,6 +113,14 @@ export function validateConfigOrThrow(): void {
 	}
 	if (isProd && !env.ORIGIN) {
 		problems.push('ORIGIN must be set in production (used for the CSRF origin check and Secure cookies).');
+	}
+	// A typo'd timezone would silently mis-bucket every analytic, so fail fast.
+	if (env.OPENIBEX_TZ !== undefined) {
+		try {
+			new Intl.DateTimeFormat('en-CA', { timeZone: env.OPENIBEX_TZ });
+		} catch {
+			problems.push(`OPENIBEX_TZ is not a valid IANA timezone (e.g. "America/Los_Angeles"): ${env.OPENIBEX_TZ}`);
+		}
 	}
 	// Optional, but if present it must be a valid 32-byte key — a malformed one
 	// would otherwise only blow up the first time a user connects/syncs Garmin.

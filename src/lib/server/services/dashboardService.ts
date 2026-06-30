@@ -22,6 +22,7 @@ import {
 	upsertActivityStreamMetrics
 } from '$lib/server/repositories/activityStreamMetricsRepository';
 import { readStreamBlob } from '$lib/server/services/fileStorageService';
+import { startOfLocalDay } from '$lib/server/time';
 import type { Sport } from '$lib/server/db/schema';
 import { SPORT_DISPLAY } from '$lib/server/sport';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES } from '$lib/zones';
@@ -93,12 +94,6 @@ export type DashboardData = {
 	recent: ActivityListRow[];
 	hasData: boolean;
 };
-
-function startOfLocalDay(d: Date): Date {
-	const out = new Date(d);
-	out.setHours(0, 0, 0, 0);
-	return out;
-}
 
 function localDayIndex(activityDate: Date, windowStart: Date): number {
 	const start = startOfLocalDay(windowStart).getTime();
