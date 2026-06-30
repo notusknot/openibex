@@ -5,7 +5,7 @@ session. Deeper docs are linked; read them when a task needs them.
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — data flow + the *why* behind non-obvious decisions.
 - **[docs/DOMAIN.md](docs/DOMAIN.md)** — load / PMC formulas, dedup guarantees, data-model invariants.
-- **[CHANGELOG.md](CHANGELOG.md)** — what shipped. **[ROADMAP.md](ROADMAP.md)** — what's planned.
+- **[CHANGELOG.md](docs/CHANGELOG.md)** — what shipped. **[ROADMAP.md](docs/ROADMAP.md)** — what's planned.
 - **[docs/development.md](docs/development.md)** — branch protection + where the real enforcement is.
 
 ## What this is
