@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import zlib from 'node:zlib';
 
 import {
 	commitActivityWithFile,
@@ -8,7 +7,7 @@ import {
 import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
 import { createImportJob } from '$lib/server/repositories/importJobsRepository';
 import { parseFit } from '$lib/server/parsers/fit/fitParser';
-import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
+import { gzipJson, writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 import {
 	computeActivityStreamMetrics,
@@ -75,7 +74,7 @@ export async function importFitUpload(input: {
 	// (previously a half-written activity_file row blocked re-uploading the file).
 	const upload = await writeUploadFile({ userId: input.userId, sha256, ext: 'fit', bytes: input.bytes });
 
-	const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
+	const gzipBytes = await gzipJson(parsed.stream);
 	const stream = await writeStreamBlob({ activityId, gzipBytes });
 	const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 

@@ -133,8 +133,11 @@ export async function getUserFromSessionToken(token: string): Promise<
 	if (!token) return null;
 	const secret = getSessionSecret();
 
-	await deleteExpiredSessions(new Date());
-
+	// NOTE: expired-session garbage collection is NOT done here — it ran a full
+	// DELETE on the sessions table on every authenticated request (a write txn +
+	// WAL growth per navigation on single-writer SQLite). Correctness is covered
+	// by the per-session expiry check below (an expired hit is deleted
+	// individually); bulk cleanup runs on an interval via startSessionSweep().
 	const tokenHash = hashSessionToken(token, secret);
 	const session = await getSessionByTokenHash(tokenHash);
 	if (!session) return null;
@@ -150,6 +153,26 @@ export async function getUserFromSessionToken(token: string): Promise<
 	}
 
 	return { user: toAuthUser(user), prefs: toAuthUserPrefs(user), tokenHash };
+}
+
+let sessionSweepStarted = false;
+
+/**
+ * Start the periodic expired-session sweep. Replaces the per-request bulk DELETE
+ * that turned every authenticated navigation into a write transaction. Runs once
+ * now and then on an interval; the timer is `unref`'d so it never holds the
+ * process open or delays graceful shutdown. Idempotent.
+ */
+export function startSessionSweep(intervalMs = 60 * 60 * 1000): void {
+	if (sessionSweepStarted) return;
+	sessionSweepStarted = true;
+	const sweep = () => {
+		void deleteExpiredSessions(new Date()).catch(() => {
+			/* best effort — a failed sweep just leaves rows for the next pass */
+		});
+	};
+	sweep();
+	setInterval(sweep, intervalMs).unref();
 }
 
 export async function logoutBySessionToken(token: string): Promise<void> {

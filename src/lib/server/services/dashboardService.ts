@@ -307,9 +307,16 @@ async function resolveStreamMetrics(
 		}
 	}
 
-	if (stale.length > 0) {
+	// Heal stale/missing rows with BOUNDED concurrency. Each heal reads +
+	// gunzips + re-aggregates a multi-MB stream blob; an unbounded Promise.all
+	// over a whole stale window (after a STREAM_METRICS_VERSION bump, or on a
+	// fresh clone before the backfill CLI runs) would read hundreds of MB at once
+	// and stall the dashboard. The steady state has zero stale rows, so this loop
+	// is skipped entirely.
+	const HEAL_CONCURRENCY = 4;
+	for (let i = 0; i < stale.length; i += HEAL_CONCURRENCY) {
 		await Promise.all(
-			stale.map(async (a) => {
+			stale.slice(i, i + HEAL_CONCURRENCY).map(async (a) => {
 				try {
 					const metrics = computeActivityStreamMetrics(await readStreamBlob(a.id));
 					out.set(a.id, metrics);

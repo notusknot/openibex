@@ -1,7 +1,7 @@
 import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
-import { getUserFromSessionToken, SESSION_COOKIE_NAME } from '$lib/server/services/authService';
+import { getUserFromSessionToken, SESSION_COOKIE_NAME, startSessionSweep } from '$lib/server/services/authService';
 import { registerShutdownHandlers } from '$lib/server/shutdown';
 import { validateConfigOrThrow } from '$lib/server/env';
 import { warnIfSyncKeyMisconfigured } from '$lib/server/sync/keyCheck';
@@ -23,6 +23,9 @@ if (!process.env.VITEST) {
 	} catch (err) {
 		getLogger().error({ err }, 'boot: import-batch sweep failed');
 	}
+	// Periodically GC expired sessions off the request path (was a per-request
+	// full DELETE). Timer is unref'd so it never delays shutdown.
+	startSessionSweep();
 	// Loud (but non-fatal) warning if stored Garmin credentials can't be
 	// decrypted with the current SYNC_ENCRYPTION_KEY. Fire-and-forget so it
 	// never delays boot; experimental sync must not gate the whole app.

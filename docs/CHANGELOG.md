@@ -180,6 +180,32 @@ capability and the patch version for fixes; breaking changes may land in a minor
   `releaseSyncJob`), so a slow poll whose lock had gone stale and been reclaimed could clobber the
   newer poll's live lock and corrupt its circuit-breaker state, allowing two concurrent reconciles of
   one feed. It now mirrors `releaseSyncJob` exactly (transaction + owner check).
+- **Expired sessions are GC'd on a timer, not on every request** — `getUserFromSessionToken`
+  (called from the auth hook for every request with a session cookie) ran a full
+  `DELETE FROM sessions WHERE expires_at < now` each time, turning every authenticated navigation
+  into a write transaction (and WAL growth) on single-writer SQLite. The per-session expiry check
+  still rejects + deletes an expired hit immediately (correctness unchanged); bulk cleanup now runs
+  on an `unref`'d hourly interval. Added an index on `sessions.expires_at` so the sweep is not a
+  full scan (migration `0015`).
+- **The dashboard no longer reads the whole stream window at once** — when per-activity stream
+  metrics are missing or stale (a `STREAM_METRICS_VERSION` bump, or a fresh clone before the backfill
+  CLI runs) the dashboard heals them by reading + decompressing each stream blob. This was an
+  unbounded `Promise.all`, so the first load could read hundreds of MB concurrently and stall. It is
+  now bounded to 4 in flight (steady state still does zero stream reads).
+- **Stream compression no longer blocks the event loop** — all three FIT ingestion paths (single
+  upload, bulk import, Garmin sync) compressed the parsed stream with synchronous `zlib.gzipSync`
+  (tens of MB of JSON for a long activity, hundreds of ms of main-thread CPU, serialized during a
+  backfill). They now use async `zlib.gzip` (libuv threadpool) via a shared `gzipJson` helper.
+- **Zip extraction is bounded against zip bombs** — the Garmin-export importer capped only the
+  *compressed* archive (1 GiB) and buffered each entry fully in memory; a crafted archive could
+  inflate to many GB and OOM the box. Entries are now streamed to disk with per-entry (1 GiB) and
+  whole-archive (8 GiB) decompressed caps that abort the moment they're exceeded — generous for any
+  real export, fatal to a bomb.
+- **The app-rail season summary is cached briefly** — it is loaded by the shared layout on every
+  navigation (an 84-day scan + count + reduce, duplicating the dashboard's own query on the
+  dashboard). A 20-second in-memory cache, keyed on the prefs that affect the numbers, collapses
+  rapid navigations into one query; a settings change is reflected immediately, only newly-imported
+  activities lag for at most the TTL.
 - **A missing or rotated `SYNC_ENCRYPTION_KEY` now fails loudly instead of silently.** If stored
   Garmin credentials exist but can't be decrypted with the current key (key missing, changed, or
   rotated), the app logs a clear error at startup explaining sync will keep failing and how to fix it

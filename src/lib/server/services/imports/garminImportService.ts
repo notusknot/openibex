@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import zlib from 'node:zlib';
 
 import { getEnv } from '$lib/server/env';
 import { FitNotAnActivityError, parseFit } from '$lib/server/parsers/fit/fitParser';
@@ -10,7 +9,7 @@ import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFi
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
 import { getUserByEmail } from '$lib/server/repositories/usersRepository';
-import { writeStreamBlob } from '$lib/server/services/fileStorageService';
+import { gzipJson, writeStreamBlob } from '$lib/server/services/fileStorageService';
 import {
 	computeActivityStreamMetrics,
 	serializeStreamMetrics
@@ -297,7 +296,7 @@ export async function importGarminHistoricalExport(input: {
 
 				const activityFileId = crypto.randomUUID();
 				const activityId = crypto.randomUUID();
-				const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
+				const gzipBytes = await gzipJson(parsed.stream);
 				const stream = await writeStreamBlob({ activityId, gzipBytes });
 				const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 

@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import zlib from 'node:zlib';
 
 import { unsealJson, sealJson } from '$lib/server/sync/crypto';
 import {
@@ -25,7 +24,7 @@ import {
 } from '$lib/server/repositories/garminCredentialsRepository';
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
-import { writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
+import { gzipJson, writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
 import {
 	computeActivityStreamMetrics,
 	serializeStreamMetrics
@@ -346,7 +345,7 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 
 				const activityFileId = crypto.randomUUID();
 				const activityId = crypto.randomUUID();
-				const gzipBytes = zlib.gzipSync(JSON.stringify(parsed.stream));
+				const gzipBytes = await gzipJson(parsed.stream);
 				const stream = await writeStreamBlob({ activityId, gzipBytes });
 				const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
 
