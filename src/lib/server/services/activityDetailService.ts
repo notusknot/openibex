@@ -21,7 +21,7 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/server/sport';
+import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/sport';
 import type { ActivityTrack, TrackPoint } from '$lib/track';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES, hrZoneIndex } from '$lib/zones';
 import type { UserPreferences } from '$lib/validation/userPreferences';
@@ -221,6 +221,11 @@ export async function getActivityDetail(input: {
 	if (!activity) return null;
 	const prefs = input.prefs ?? null;
 	const units: Units = prefs?.units ?? 'imperial';
+	// Prefer the athlete's configured max HR as the zone reference, matching the
+	// dashboard's time-in-zone card — otherwise the same activity bucketed against
+	// its own sample max here and against prefs.maxHrBpm there, showing different
+	// zone distributions on the two views.
+	const userMaxHr = prefs?.maxHrBpm && prefs.maxHrBpm > 100 ? prefs.maxHrBpm : null;
 
 	const [fileRow, link, streamRaw] = await Promise.all([
 		activity.activityFileId
@@ -318,7 +323,7 @@ export async function getActivityDetail(input: {
 	// Max-HR reference (same basis as the zone histogram), so the map can bucket
 	// points into HR zones client-side.
 	const maxHrCandidate =
-		activity.maxHr && activity.maxHr > 100 ? activity.maxHr : rawHr.length ? maxOf(rawHr) : 0;
+		userMaxHr ?? (activity.maxHr && activity.maxHr > 100 ? activity.maxHr : rawHr.length ? maxOf(rawHr) : 0);
 	const maxHrRef = Number.isFinite(maxHrCandidate) && maxHrCandidate > 0 ? maxHrCandidate : null;
 
 	// Shared point array driving BOTH the route map and the time-series charts.
@@ -378,7 +383,7 @@ export async function getActivityDetail(input: {
 	});
 
 	// HR zones
-	const hrZones = computeHrZones(rawHr, activity.maxHr ?? null);
+	const hrZones = computeHrZones(rawHr, userMaxHr ?? activity.maxHr ?? null);
 
 	// Peak efforts
 	const peaks: ActivityPeak[] = [];

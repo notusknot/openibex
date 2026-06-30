@@ -10,7 +10,7 @@ import {
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_DISPLAY } from '$lib/server/sport';
+import { SPORT_DISPLAY } from '$lib/sport';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 import { distanceFromMeters, distanceUnit, type Units } from '$lib/units';
 

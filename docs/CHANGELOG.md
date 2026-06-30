@@ -206,6 +206,27 @@ capability and the patch version for fixes; breaking changes may land in a minor
   dashboard). A 20-second in-memory cache, keyed on the prefs that affect the numbers, collapses
   rapid navigations into one query; a settings change is reflected immediately, only newly-imported
   activities lag for at most the TTL.
+- **HR zones now match between the dashboard and the activity detail page** — the detail page
+  bucketed HR against the activity's own max while the dashboard preferred the athlete's configured
+  max HR, so the same activity showed two different zone distributions. The detail page now also
+  prefers `prefs.maxHrBpm`.
+- **Strain/monotony no longer explode on a perfectly even week** — monotony (`mean/sd`) guarded a
+  zero standard deviation with `sd || 1`, turning a week of equal daily loads into `monotony = mean`
+  and a meaningless strain. The degenerate (no-variation) case now reads as undefined (`—`).
+- **Workout `loadCompliance` is computed again** — it read the raw `loadScore` field, which no
+  import path populates, so it was always blank. It now uses the shared `loadFor` (the same
+  training-load figure used everywhere else).
+- **A recorded normalized-power of 0 no longer drops a ride to the duration-only load estimate** —
+  `normalizedPowerLikeW ?? avgPowerW` let a stored `0` shadow a valid average power; it now prefers a
+  positive value.
+- **Pace labels no longer render `:60`** — a fractional pace at a minute boundary (e.g. 4:59.7)
+  rounded the seconds alone to `:60`; the total is now rounded before splitting (→ `5:00`).
+- **Impossible calendar dates are rejected** — `isLocalDate` accepted any day 1–31 for any month
+  (e.g. `2026-02-31`), which later rolled silently to the wrong day; it now validates a real date.
+- **Docs + cleanup:** corrected stale `CLAUDE.md` references (the removed `/analytics` page +
+  `api/analytics` endpoint, the `analytics:rebuild` → `metrics:rebuild` command, and the obsolete
+  "two PMC code paths" note — there is one). Removed the no-op `src/lib/server/sport.ts` re-export
+  shim (callers import `$lib/sport` directly). Documented the new `OPENIBEX_TZ` in `.env.example`.
 - **A missing or rotated `SYNC_ENCRYPTION_KEY` now fails loudly instead of silently.** If stored
   Garmin credentials exist but can't be decrypted with the current key (key missing, changed, or
   rotated), the app logs a clear error at startup explaining sync will keep failing and how to fix it

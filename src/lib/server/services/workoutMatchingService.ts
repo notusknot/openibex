@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import type { Sport } from '$lib/server/db/schema';
 import { listPlannedWorkouts } from '$lib/server/services/plannedWorkoutsService';
 import { listActivitiesForUserInTimeRange, getActivityByIdForUser } from '$lib/server/repositories/activitiesRepository';
+import { loadFor } from '$lib/server/services/analytics/load';
 import { listWorkoutLinksForPlannedWorkouts, createWorkoutLink, deleteWorkoutLinkForPlannedWorkout, deleteWorkoutLinksForActivity } from '$lib/server/repositories/workoutLinksRepository';
 import { localDayKey, dayBoundsFromKey } from '$lib/server/time';
 import { getPlannedWorkoutByIdForUser } from '$lib/server/repositories/plannedWorkoutsRepository';
@@ -91,7 +92,7 @@ export async function ensureAutoMatchesForRange(input: {
 			plannedLoad: p.plannedLoad,
 			completedDurationSec: activity.durationSec ?? null,
 			completedDistanceM: activity.distanceM ?? null,
-			completedLoad: activity.loadScore ?? null
+			completedLoad: loadFor(activity, null)
 		});
 
 		await createWorkoutLink({

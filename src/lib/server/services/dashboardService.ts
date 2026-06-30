@@ -24,7 +24,7 @@ import {
 import { readStreamBlob } from '$lib/server/services/fileStorageService';
 import { startOfLocalDay } from '$lib/server/time';
 import type { Sport } from '$lib/server/db/schema';
-import { SPORT_DISPLAY } from '$lib/server/sport';
+import { SPORT_DISPLAY } from '$lib/sport';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES } from '$lib/zones';
 import type { UserPreferences } from '$lib/validation/userPreferences';
 
@@ -464,9 +464,13 @@ export async function getDashboardData(
 	const sd7Raw = Math.sqrt(
 		l7.reduce((acc, v) => acc + (v - mean7) * (v - mean7), 0) / Math.max(1, l7.length)
 	);
-	const sd7 = sd7Raw || 1;
-	const monotonyN = mean7 / sd7;
-	const strainN = Math.round(l7.reduce((acc, v) => acc + v, 0) * monotonyN);
+	// Monotony (Foster) = mean/sd. sd == 0 means no day-to-day variation, where the
+	// ratio is undefined; the old `sd || 1` substituted 1, turning monotony into
+	// the raw mean and exploding strain (mean × weekly load) into a meaningless
+	// figure. Treat the degenerate case as undefined ('—') instead.
+	const weekSum = l7.reduce((acc, v) => acc + v, 0);
+	const monotonyN = sd7Raw > 0 ? mean7 / sd7Raw : NaN;
+	const strainN = Number.isFinite(monotonyN) ? Math.round(weekSum * monotonyN) : 0;
 	const readinessVal = Math.max(3, Math.min(100, Math.round(50 + last.tsb * 1.6)));
 
 	const kpis: DashboardKpis = {

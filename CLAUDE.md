@@ -29,7 +29,7 @@ pnpm db:migrate           # apply migrations (also auto-runs on first DB access)
 pnpm db:studio            # drizzle studio
 
 pnpm import:garmin -- --user you@example.com --path /path/to/extracted/garmin-export
-pnpm analytics:rebuild -- --user you@example.com
+pnpm metrics:rebuild -- --user you@example.com   # recompute per-activity stream metrics
 pnpm audit                # pnpm audit --prod
 ```
 
@@ -43,9 +43,9 @@ If `/api/health` fails with a `better-sqlite3` bindings error: `pnpm rebuild bet
 ```
 src/routes/(public)/   login, register            src/lib/server/
 src/routes/(app)/      dashboard, activities,        services/      business logic
-                       calendar, analytics,          repositories/  the ONLY layer touching Drizzle
-                       imports, settings             db/            schema.ts, client.ts, shutdown.ts
-src/routes/api/        health, analytics             parsers/fit/   FIT parsing (worker thread)
+                       calendar, imports,            repositories/  the ONLY layer touching Drizzle
+                       settings                      db/            schema.ts, client.ts, shutdown.ts
+src/routes/api/        health                        parsers/fit/   FIT parsing (worker thread)
 drizzle/               SQL migrations                sync/          garmin-connect adapter
 scripts/               CLIs (import-garmin, …)        security/, env.ts
 ```
@@ -75,8 +75,10 @@ scripts/               CLIs (import-garmin, …)        security/, env.ts
   crafted files must not block the event loop. Don't move parsing back onto the main thread.
 - **SQLite is single-writer.** One `better-sqlite3` connection per process, WAL + `foreign_keys=ON`
   + `busy_timeout`. Graceful shutdown drains writes and checkpoints the WAL on `SIGTERM`.
-- **Analytics has two PMC code paths** (dashboard EWMA vs analytics-page rolling average) — see
-  [DOMAIN.md](docs/DOMAIN.md) before touching the math.
+- **PMC math lives in `dashboardService`** (EWMA CTL/ATL/TSB over an 84-day window) — the single
+  source of training-load truth. Day bucketing uses the app timezone (`OPENIBEX_TZ`, via
+  `src/lib/server/time.ts`), not the server clock. See [DOMAIN.md](docs/DOMAIN.md) before touching
+  the load/PMC formulas.
 
 ## Development Workflow
 

@@ -57,9 +57,11 @@ export function paceLabel(
 	) {
 		return '—';
 	}
-	const sec = paceFromSecPerKm(secPerKm, units);
-	const m = Math.floor(sec / 60);
-	const s = Math.round(sec % 60);
+	// Round the TOTAL seconds first, then split — rounding the remainder alone
+	// produced ':60' at a minute boundary (e.g. 299.7 → 4:60 instead of 5:00).
+	const total = Math.round(paceFromSecPerKm(secPerKm, units));
+	const m = Math.floor(total / 60);
+	const s = total % 60;
 	return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
