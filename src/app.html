@@ -24,7 +24,9 @@
 
 		<link rel="manifest" href="/manifest.webmanifest" />
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-		<link rel="apple-touch-icon" href="/icon.svg" />
+		<!-- iOS "Add to Home Screen" uses a PNG apple-touch-icon (SVG is not
+		     reliably supported here); iOS scales + rounds it. -->
+		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 
 		<!-- Fonts (Archivo + JetBrains Mono) are self-hosted via Fontsource and
 		     imported in src/routes/+layout.svelte; the critical faces are

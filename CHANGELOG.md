@@ -15,6 +15,16 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Installable PWA with offline shell** — OpenIbex now registers a service worker
+  (`src/service-worker.ts`) that precaches the app shell (content-hashed build chunks + public
+  static files) for instant standalone launch, while keeping **all data network-first** so
+  authenticated content is never served stale. The routing logic lives in a pure, unit-tested
+  module (`src/lib/pwa/strategy.ts`) and enforces one safety invariant: authenticated
+  HTML is never written to the cache; only immutable assets, public files, and the offline page are.
+  A self-contained offline fallback (`static/offline.html`) is shown when a navigation fails with no
+  connection. Adds proper home-screen icons (`static/icons/` — 512px `any` + `maskable`, plus a PNG
+  `apple-touch-icon` so iOS "Add to Home Screen" renders correctly). Requires the app be served over
+  HTTPS (e.g. behind Caddy/Tailscale) for the service worker to register.
 - **Garmin bulk import from the web** — **Settings → Import Garmin export** now accepts a full Garmin
   "Export Your Data" archive (`.zip`) and runs the exact same job as the `pnpm import:garmin` CLI: the
   upload is extracted server-side, then discovery, the four-stage de-duplication (file SHA-256 / prior
