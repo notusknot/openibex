@@ -173,7 +173,27 @@ export const actions: Actions = {
 	importGarminExport: async ({ locals, request }) => {
 		if (!locals.user) throw redirect(303, '/login');
 
-		const form = await request.formData();
+		// adapter-node rejects request bodies larger than BODY_SIZE_LIMIT (512 KB
+		// by default) before the file ever reaches us — that surfaces as a thrown
+		// 413 right here, which would otherwise become an opaque 500. A reverse
+		// proxy's own body cap (e.g. Caddy `request_body`) is SEPARATE and does not
+		// raise the app's limit. Note: this adapter takes BYTES only — "512M" is
+		// parsed as 512 bytes, so use a raw integer.
+		let form: FormData;
+		try {
+			form = await request.formData();
+		} catch (err) {
+			const status = (err as { status?: number })?.status;
+			const message = err instanceof Error ? err.message : '';
+			if (status === 413 || /payload too large|body size|exceeds limit/i.test(message)) {
+				return fail(413, {
+					importError:
+						"Upload exceeds the server's BODY_SIZE_LIMIT. Raise it (in BYTES — e.g. 536870912 for 512 MB; this adapter does not accept “512M”) and any reverse-proxy body cap, then retry. The pnpm import:garmin CLI has no such limit."
+				});
+			}
+			return fail(400, { importError: 'Could not read the upload. Please try again.' });
+		}
+
 		const file = form.get('file');
 		if (!(file instanceof File)) {
 			return fail(400, { importError: 'Choose your Garmin export .zip file.' });
