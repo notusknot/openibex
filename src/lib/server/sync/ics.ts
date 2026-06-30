@@ -1,5 +1,8 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import https from 'node:https';
+import { Readable } from 'node:stream';
+import type { LookupFunction } from 'node:net';
 
 import ICAL from 'ical.js';
 
@@ -91,10 +94,10 @@ function ipIsPrivateOrReserved(ip: string): boolean {
 	return true; // not a recognizable IP → reject
 }
 
-/** Validate a user-supplied feed URL before fetching it. Requires https and
- * rejects any host that resolves to a private/reserved address. Returns the
- * parsed URL. Best-effort against DNS rebinding (re-checked per redirect hop). */
-export async function assertSafePublicUrl(raw: string): Promise<URL> {
+/** Validate a user-supplied feed URL AND return the validated IP(s) so the
+ * connection can be pinned to them. Requires https and rejects any host that
+ * resolves to a private/reserved address. */
+export async function resolveSafeFeedTarget(raw: string): Promise<{ url: URL; addresses: string[] }> {
 	let url: URL;
 	try {
 		url = new URL(raw);
@@ -110,7 +113,7 @@ export async function assertSafePublicUrl(raw: string): Promise<URL> {
 	}
 	if (net.isIP(host)) {
 		if (ipIsPrivateOrReserved(host)) throw new Error('Calendar feed host is not allowed.');
-		return url;
+		return { url, addresses: [host] };
 	}
 	let resolved: { address: string }[];
 	try {
@@ -121,7 +124,68 @@ export async function assertSafePublicUrl(raw: string): Promise<URL> {
 	if (resolved.length === 0 || resolved.some((r) => ipIsPrivateOrReserved(r.address))) {
 		throw new Error('Calendar feed host is not allowed.');
 	}
-	return url;
+	return { url, addresses: resolved.map((r) => r.address) };
+}
+
+/** Validate a user-supplied feed URL before fetching it. Returns the parsed URL.
+ * The fetcher uses `resolveSafeFeedTarget` to also PIN the socket to the
+ * validated IP (closing the rebinding window); this thin wrapper exists for
+ * call sites that only need to validate. Re-checked per redirect hop. */
+export async function assertSafePublicUrl(raw: string): Promise<URL> {
+	return (await resolveSafeFeedTarget(raw)).url;
+}
+
+// Pin a fetch to a set of already-validated IPs: ignore the system resolver and
+// connect only to an address resolveSafeFeedTarget approved. This closes the
+// TOCTOU/DNS-rebinding gap where the guard resolves one (public) IP and the
+// kernel later re-resolves to a private one. TLS SNI + cert validation still use
+// the real hostname, so https feeds keep verifying correctly.
+function pinnedLookup(addresses: string[]): LookupFunction {
+	return ((_hostname: string, options: { all?: boolean }, callback: (...a: unknown[]) => void) => {
+		const entries = addresses.map((address) => ({ address, family: net.isIP(address) }));
+		if (options && options.all) callback(null, entries);
+		else callback(null, entries[0]!.address, entries[0]!.family);
+	}) as unknown as LookupFunction;
+}
+
+/** Single GET (no auto-redirect) over node:https with the socket pinned to
+ * `addresses`. Returns a web `Response` so the caller treats it like `fetch`. */
+function pinnedHttpsGet(
+	urlStr: string,
+	opts: { headers: Record<string, string>; signal: AbortSignal; addresses: string[] }
+): Promise<Response> {
+	return new Promise((resolve, reject) => {
+		const u = new URL(urlStr);
+		const req = https.request(
+			{
+				hostname: u.hostname,
+				servername: u.hostname,
+				port: u.port || 443,
+				path: `${u.pathname}${u.search}`,
+				method: 'GET',
+				headers: opts.headers,
+				lookup: pinnedLookup(opts.addresses),
+				signal: opts.signal
+			},
+			(res) => {
+				const status = res.statusCode ?? 0;
+				const headers = new Headers();
+				for (const [k, v] of Object.entries(res.headers)) {
+					if (Array.isArray(v)) for (const vv of v) headers.append(k, vv);
+					else if (typeof v === 'string') headers.set(k, v);
+				}
+				// 204/205/304 must carry a null body per the Response contract.
+				if (status === 204 || status === 205 || status === 304) {
+					res.resume();
+					resolve(new Response(null, { status, headers }));
+					return;
+				}
+				resolve(new Response(Readable.toWeb(res) as unknown as ReadableStream, { status, headers }));
+			}
+		);
+		req.on('error', reject);
+		req.end();
+	});
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────
@@ -159,7 +223,9 @@ export const defaultFetchIcs: FetchIcs = async (rawUrl, conditional) => {
 	try {
 		let current = rawUrl;
 		for (let hop = 0; hop < 6; hop++) {
-			await assertSafePublicUrl(current);
+			// Validate AND pin: connect only to the IP we just approved, so a
+			// rebinding flip between check and connect can't reach an internal host.
+			const target = await resolveSafeFeedTarget(current);
 			const headers: Record<string, string> = {
 				accept: 'text/calendar, text/plain;q=0.9, */*;q=0.5',
 				'user-agent': 'OpenIbex-Calendar-Sync/1'
@@ -167,7 +233,11 @@ export const defaultFetchIcs: FetchIcs = async (rawUrl, conditional) => {
 			if (conditional.etag) headers['if-none-match'] = conditional.etag;
 			if (conditional.lastModified) headers['if-modified-since'] = conditional.lastModified;
 
-			const res = await fetch(current, { redirect: 'manual', signal: controller.signal, headers });
+			const res = await pinnedHttpsGet(target.url.toString(), {
+				headers,
+				signal: controller.signal,
+				addresses: target.addresses
+			});
 
 			if (res.status === 304) return { status: 'not_modified' };
 			if (res.status >= 300 && res.status < 400) {

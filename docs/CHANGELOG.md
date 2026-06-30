@@ -237,6 +237,23 @@ capability and the patch version for fixes; breaking changes may land in a minor
   with `touch-action: pan-y` (vertical page scroll still works) and pointer capture, replacing the
   mouse-only `mousemove` handler.
 
+### Security
+- **Production config now fails safe instead of fails open** — security gating keyed off
+  `NODE_ENV === 'production'`, but `node build` (a bare `pnpm start`) sets no `NODE_ENV`, so a
+  self-hoster who didn't export it silently ran in development mode: `SESSION_SECRET` and `ORIGIN`
+  became optional, session HMACs fell back to a hardcoded public constant, and cookies weren't
+  Secure — with no warning. The app now treats an unset environment as **production** (dev/test must
+  be explicit), so it refuses to boot without a real `SESSION_SECRET`/`ORIGIN`, and never uses the
+  dev secret outside an explicitly-dev run. It also logs a loud warning when a production deployment
+  can't mark the session cookie Secure (`ORIGIN` not `https://`). **Action for existing
+  deployments:** set `OPENIBEX_ENV=development` for local non-prod runs, or provide
+  `SESSION_SECRET` + `ORIGIN` (you should already have these in production).
+- **Calendar-feed fetch now pins DNS to the validated IP** — the SSRF guard resolved + checked the
+  feed host, then `fetch` re-resolved independently, leaving a DNS-rebinding window to reach an
+  internal HTTPS service. The fetch now connects only to the exact IP the guard approved (via a
+  pinned `lookup` over `node:https`), re-validated and re-pinned on every redirect hop; TLS still
+  verifies against the real hostname.
+
 ## [0.2.0] - 2026-06-24
 
 Live (experimental) Garmin Connect sync, a broad production-hardening pass, a full UI redesign, and the activities filtering workflow.

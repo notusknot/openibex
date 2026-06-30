@@ -46,7 +46,11 @@ function getSessionSecret(): string {
 	const env = getEnv();
 	const secret = env.SESSION_SECRET;
 	if (secret && secret.length >= 16) return secret;
-	if (env.NODE_ENV === 'production') {
+	// Fail closed in production (now the default when NODE_ENV is unset, e.g. a
+	// bare `node build`): never silently key session HMACs on the public dev
+	// constant. validateConfigOrThrow already refuses to boot in this case, so
+	// this is defense in depth.
+	if (env.isProduction) {
 		throw new Error('SESSION_SECRET must be set (16+ chars).');
 	}
 	return 'openibex-dev-secret-openibex-dev-secret';
