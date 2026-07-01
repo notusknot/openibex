@@ -15,6 +15,16 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Compare two activities** — a new `/activities/compare` page overlays two activities on one chart,
+  switchable between heart rate, pace, power and elevation and alignable by **moving time or
+  distance**, with a synced hover tooltip reading both values at a point. Below the chart, a
+  side-by-side stat table shows each activity's summary plus a B − A delta (duration, distance, TSS,
+  IF, pace, HR, elevation, calories). Pick the pair from two dropdowns — each floats the 3 most
+  recent activities of the *other* pick's sport into a "Suggested" group — or hit **Compare** on any
+  activity to open it pre-selected. The series/domain logic is a pure, unit-tested module
+  (`src/lib/compare.ts`); rendering is a hand-rolled SVG (`CompareChart.svelte`) reusing the
+  activity-detail chart idioms, and the page goes route → `compareService` → existing
+  `getActivityDetail` with no new schema or migration.
 - **Faster in-app navigation (perceived + on-the-wire)** — clicking between pages now shows an
   immediate thin top progress bar (`src/lib/components/ui/NavProgress.svelte`, driven by SvelteKit's
   `navigating` store), so a tap gives feedback instantly instead of leaving the old page frozen until
