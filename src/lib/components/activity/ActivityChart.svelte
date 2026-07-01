@@ -248,7 +248,7 @@
 
 <div class="card chart-card">
 	<div class="card-head">
-		<div class="card-title">Heart rate &amp; pace</div>
+		<div class="card-title">HR / pace</div>
 		<div class="head-right">
 			<div class="time-toggle" role="group" aria-label="Time axis">
 				<button type="button" class="time-btn" class:active={mode === 'moving'} on:click={() => (mode = 'moving')}>Moving</button>

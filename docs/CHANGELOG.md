@@ -15,6 +15,15 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Revisiting a page is instant (client-side stale-while-revalidate cache)** — SvelteKit re-runs a
+  page's `load` on every navigation and caches nothing, so bouncing between the activities list, an
+  activity, and the calendar re-showed the streaming skeleton each time. A small client-only cache
+  (`src/lib/swrCache.ts`, keyed by URL) now keeps the last resolved value per page: a revisit renders
+  it immediately (no skeleton) and silently refetches in the background to update. It's **client-only**
+  (guarded by `browser`, so the shared server process never caches — no cross-user leak) and lives only
+  in memory, resetting on a full reload; a form submission busts it (`afterNavigate`) so a mutation
+  can't flash stale data, and the always-on background refetch corrects anything else within one visit.
+  First visits still stream + skeleton as before.
 - **Compare two activities** — a new `/activities/compare` page overlays two activities on one chart,
   switchable between heart rate, pace, power and elevation and alignable by **moving time or
   distance**, with a synced hover tooltip reading both values at a point. Below the chart, a
@@ -36,6 +45,28 @@ capability and the patch version for fixes; breaking changes may land in a minor
   longer waits on a module fetch. Server `load` work was profiled and deliberately left unchanged — it
   was already single-digit-millisecond; the bottleneck was bytes on the wire and missing feedback, not
   compute.
+- **Instant page transitions via streamed loads** — the three heaviest pages (activities list,
+  activity detail, calendar) now return their data as an *unawaited* promise from the server `load`
+  and render it through `{#await}` behind a lightweight `Skeleton` placeholder
+  (`src/lib/components/ui/Skeleton.svelte`). Over the relay a navigation flips to the page shell
+  immediately instead of freezing on the previous page until the round trip lands — most noticeable
+  when paging months in the calendar (each prev/next is its own request, and the sport filter is
+  preserved across the switch) and when opening an activity's detailed streams. Route *code*
+  preloading was bumped `hover` → `viewport` (`src/app.html`) so a link's JS/CSS chunk downloads as
+  it scrolls into view rather than on tap. Note: a missing `/activities/[id]` now renders an in-page
+  "not found" (HTTP 200) instead of an SSR 404, since the detail is streamed rather than awaited.
+  While a page streams, skeletons render *inside* the real card/row/table markup, sized from an
+  invisible text placeholder so each one occupies the exact line box of the value it replaces — so
+  heights, grid columns, and every static label match the populated page (no reflow, no flash of
+  streamed constants). On the activities list the header, search bar, filter chips, summary-card
+  labels, and table column headers all show on the first frame; only the four card numbers and the
+  row cells skeleton. The activity-detail page gets the same treatment: its fixed set of eight stat
+  labels *and* the chart card titles ("HR / pace", "Elevation") render immediately as real text,
+  with only the title/date, stat values, and chart plots streaming — the plot skeletons are sized to
+  the charts' real SVG heights so nothing reflows on load. (The heart-rate/pace chart title was also
+  shortened from "Heart rate & pace" to "HR / pace", which was overflowing on mobile.) The detail
+  header's action buttons were given a fixed 30px height (slightly shorter than the old
+  padding-derived height) so they line up exactly with the loading skeleton's button placeholders.
 - **Installable PWA with offline shell** — OpenIbex now registers a service worker
   (`src/service-worker.ts`) that precaches the app shell (content-hashed build chunks + public
   static files) for instant standalone launch, while keeping **all data network-first** so
@@ -174,6 +205,19 @@ capability and the patch version for fixes; breaking changes may land in a minor
   CLI, and the dead route/API code.
 
 ### Fixed
+- **Activities list "N records" count shows a small shimmer while it streams** — the subtitle's
+  loading fallback was a blank `&nbsp;`; it now renders a text-mode `Skeleton` sized to the real
+  count's line box (no reflow), so the header reads as loading instead of empty.
+- **Activity-detail title skeleton no longer shoves the page down when it streams in** — two separate
+  sizing bugs in the streaming skeleton's header. (1) The title/date placeholder bars used percentage
+  widths (`min(58%, …)`), which resolve to ~0 against their shrink-to-fit flex parent and collapsed the
+  bars, so the action buttons stayed on one row instead of wrapping the way the loaded header always does
+  on mobile — the whole block then appeared on load and pushed the page down. (2) The title bar's height
+  (18px at ≤639px) didn't match the real `h1`, which AppShell's global mobile typography bump
+  (`:global(.title){font-size:26px !important}` at ≤767px) renders at **26px** — so the taller `h1`
+  nudged everything down a few pixels on every load. The bars now use definite pixel widths and the
+  title bar tracks the real two-tier height (22px desktop, 26px ≤767px, verified equal to the rendered
+  `h1`); the dead scoped `.title{font-size:18px}` rule it was mistakenly modelled on was removed.
 - **Activity day bucketing now follows the athlete's timezone, not the server's** — dashboard
   daily/weekly load, the sport split, and calendar auto-match computed each activity's *local* day
   with the server process clock, so on a UTC-deployed container a UTC-7 athlete's evening workout

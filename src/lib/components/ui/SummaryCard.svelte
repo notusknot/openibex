@@ -2,17 +2,28 @@
 	// A single stat tile for the summary strips on the activities and calendar
 	// pages. The accent sets the top-border color; `unit` renders smaller, after
 	// the value (e.g. "42 km", "6.5 h").
+	import Skeleton from './Skeleton.svelte';
+
 	export let label: string;
-	export let value: string | number;
+	export let value: string | number = '';
 	export let sub: string;
 	export let unit = '';
 	export let accent = 'var(--green)';
+	// While the value streams in, render the (constant) label + sub and a skeleton
+	// where the number goes. Because it's the same card with the same text, a
+	// loading tile is the exact height of a populated one — so the strip doesn't
+	// reflow when the data arrives.
+	export let loading = false;
 </script>
 
 <div class="summary-card" style="border-top-color: {accent}">
 	<div class="sum-label oi-mono">{label}</div>
 	<div class="sum-val oi-mono">
-		{value}{#if unit}<span class="sum-unit"> {unit}</span>{/if}
+		{#if loading}
+			<Skeleton text="0000" radius="5px" />
+		{:else}
+			{value}{#if unit}<span class="sum-unit"> {unit}</span>{/if}
+		{/if}
 	</div>
 	<div class="sum-sub oi-mono">{sub}</div>
 </div>

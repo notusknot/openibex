@@ -15,7 +15,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const year = parsed.ok ? parsed.year : now.getFullYear();
 	const month = parsed.ok ? parsed.month : now.getMonth() + 1;
 
-	const calendar = await getCalendarMonth({
+	// Stream the month view: return the promise unawaited so both the initial nav
+	// and every prev/next month switch transition to a skeleton instantly (the
+	// month arrows are plain links, so each switch is a fresh round trip) rather
+	// than freezing on the old grid until data arrives.
+	const calendar = getCalendarMonth({
 		userId: locals.user.id,
 		year,
 		month,

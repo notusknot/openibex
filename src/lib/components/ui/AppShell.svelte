@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { afterNavigate, preloadCode } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { bustSwrCache } from '$lib/swrCache';
 	import { theme } from '$lib/stores/theme';
 	import NavProgress from '$lib/components/ui/NavProgress.svelte';
 
@@ -43,8 +44,9 @@
 		// Warm the route code for the fixed nav targets during idle time, so the
 		// first tap on a tab doesn't pay a module fetch. On mobile there's no hover
 		// to trigger SvelteKit's per-link preload, so this is where mobile gets its
-		// head start. Code only (no `preloadData`) — data stays per-request, never
-		// cached, so this respects the "never cache authenticated data" rule.
+		// head start. Code only (no `preloadData`) — the server never caches
+		// authenticated data; reads are cached only client-side, in-memory, per user
+		// (stale-while-revalidate, see $lib/swrCache).
 		const warm = () => {
 			for (const item of navItems) void preloadCode(item.href);
 		};
@@ -62,6 +64,11 @@
 	// alone for same-page query/hash navigations (month paging, the skip link).
 	let mainEl: HTMLElement;
 	afterNavigate((nav) => {
+		// A form navigation means the user just mutated data — drop the client read
+		// cache ($lib/swrCache) so the page it lands on can't flash stale data. The
+		// per-visit background refetch would correct it anyway; this just avoids the
+		// flash. (Non-enhanced forms full-reload and reset the cache regardless.)
+		if (nav.type === 'form') bustSwrCache();
 		if (nav.from && nav.to && nav.from.url.pathname === nav.to.url.pathname) return;
 		mainEl?.scrollTo(0, 0);
 	});
