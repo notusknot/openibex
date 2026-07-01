@@ -30,6 +30,12 @@ The two things that make daily use frictionless enough to generate signal.
   84-day load) from blocking every navigation, eager-preload the nav rail for touch (hover-preload is
   a no-op on a phone), and trim the `/activities` (~98 KB) and activity-detail stream (~119 KB)
   payloads.
+- **Reconfirm calendar streaming** — the instant-transition treatment (`{#await}` + skeleton) was
+  applied to the activities list, activity detail, *and* the calendar. The calendar's month payload
+  is light, so the skeleton flash may not be worth it there. Test on the prod box; if it doesn't
+  clearly help, revert **just** the calendar page (`src/routes/(app)/calendar/+page.server.ts` +
+  `+page.svelte`, folding `CalendarView.svelte` back in) to a blocking `await`, keeping activities +
+  detail streamed.
 - **Trust the numbers** — keep the dashboard-accuracy work going, and reconcile (or at least clearly
   label) the **two PMC code paths**: the dashboard's EWMA and the analytics page's rolling average
   currently make "Fitness" read as two different numbers on two pages. See [docs/DOMAIN.md](docs/DOMAIN.md).
