@@ -41,6 +41,7 @@
 			</div>
 		</div>
 		<div class="head-actions">
+			<a class="btn" href="/activities/compare?a={activity.id}">Compare</a>
 			{#if detail.file}
 				<a class="btn" href="/activities/files/{detail.file.id}/download">Export .fit</a>
 			{/if}
