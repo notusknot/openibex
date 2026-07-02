@@ -80,7 +80,11 @@ and `syncFailing` so orchestration can verify the drain and watch sync health.
 **Why `sync_jobs` is DB-backed (not an in-memory map).** The lock + throttle + circuit breaker
 used to live in a process-local map/set. That lost all state on restart and couldn't coordinate
 across processes or browser tabs (auto-sync fires from every page load). Moving it into the
-`sync_jobs` table makes the lock, throttle, backoff, and cooldown durable and shared.
+`sync_jobs` table makes the lock, throttle, backoff, and cooldown durable and shared. The
+semantics (stale-lock reclaim, hard vs soft cool-down, ownership-guarded release, breaker
+escalation) live in **one module**, `repositories/jobLock.ts`, shared by the Garmin sync's
+`sync_jobs` row and each calendar subscription's poll state — the repositories only map their
+table's columns onto it.
 
 ## Analytics surfaces
 
@@ -110,7 +114,8 @@ invalid secrets). Don't read `process.env.*` elsewhere — add a field to `OpenI
 | Per-file ingest (dedup + parse + store) | `src/lib/server/services/ingestService.ts` |
 | Live sync orchestration | `src/lib/server/services/sync/syncService.ts` |
 | garmin-connect adapter (login, token sealing) | `src/lib/server/sync/garmin.ts` |
-| Sync lock / throttle / circuit breaker | `src/lib/server/repositories/syncJobsRepository.ts` |
+| Durable job lock / throttle / circuit breaker | `src/lib/server/repositories/jobLock.ts` |
+| Sync job row (uses jobLock) | `src/lib/server/repositories/syncJobsRepository.ts` |
 | Bulk offline import | `src/lib/server/services/imports/garminImportService.ts` |
 | Single FIT upload | `src/lib/server/services/fitImportService.ts` |
 | FIT parsing (worker) | `src/lib/server/parsers/fit/` |

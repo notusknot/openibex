@@ -295,7 +295,7 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 			await updateImportBatchProgress({ id: batchId, userId, processedFiles: processed, importedCount: imported, duplicateCount: duplicate, failedCount: failed });
 
 			// Heartbeat: a first-run backfill (download + worker FIT parse per item)
-			// can exceed SYNC_LOCK_TTL_MS. Renew the lock after each item so an
+			// can exceed the lock TTL (jobLock.JOB_LOCK_TTL_MS). Renew after each item so an
 			// actively-progressing run stays "live" and no concurrent auto-sync can
 			// start a second run for this user.
 			renewSyncJobLock(userId);

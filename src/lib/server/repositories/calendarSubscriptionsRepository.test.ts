@@ -13,9 +13,9 @@ import {
 	tryAcquireCalendarSync
 } from '$lib/server/repositories/calendarSubscriptionsRepository';
 import {
-	SYNC_ERROR_BACKOFF_BASE_MS,
-	SYNC_RATE_LIMIT_BACKOFF_BASE_MS
-} from '$lib/server/repositories/syncJobsRepository';
+	JOB_ERROR_BACKOFF_BASE_MS,
+	JOB_RATE_LIMIT_BACKOFF_BASE_MS
+} from '$lib/server/repositories/jobLock';
 
 function setTestEnv(dataDir: string) {
 	process.env.OPENIBEX_ENV = 'test';
@@ -78,7 +78,7 @@ describe('calendarSubscriptionsRepository lock + throttle (per subscription)', (
 		releaseCalendarSync(subId, { ok: false, status: 'error', error: 'boom' }, T0);
 		const row = getCalendarSubscriptionById(subId)!;
 		expect(row.consecutiveFailures).toBe(1);
-		expect(row.cooldownUntil?.getTime()).toBe(T0 + SYNC_ERROR_BACKOFF_BASE_MS);
+		expect(row.cooldownUntil?.getTime()).toBe(T0 + JOB_ERROR_BACKOFF_BASE_MS);
 		expect(tryAcquireCalendarSync(subId, win({ now: T0 + 60_000 }))).toBe(false);
 		expect(tryAcquireCalendarSync(subId, win({ now: T0 + 60_000, ignoreThrottle: true }))).toBe(true);
 	});
@@ -86,7 +86,7 @@ describe('calendarSubscriptionsRepository lock + throttle (per subscription)', (
 	it('a rate-limit cool-down blocks even a manual run', () => {
 		tryAcquireCalendarSync(subId, win({ now: T0 }));
 		releaseCalendarSync(subId, { ok: false, status: 'rate_limited', error: '429' }, T0);
-		expect(getCalendarSubscriptionById(subId)!.cooldownUntil?.getTime()).toBe(T0 + SYNC_RATE_LIMIT_BACKOFF_BASE_MS);
+		expect(getCalendarSubscriptionById(subId)!.cooldownUntil?.getTime()).toBe(T0 + JOB_RATE_LIMIT_BACKOFF_BASE_MS);
 		expect(tryAcquireCalendarSync(subId, win({ now: T0 + 60_000, ignoreThrottle: true }))).toBe(false);
 	});
 

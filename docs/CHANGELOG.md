@@ -15,6 +15,15 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Changed
+- **One durable coordination-lock module for sync and calendar** — the DB-backed lock + throttle +
+  exponential backoff + circuit breaker was implemented twice (`syncJobsRepository` and
+  `calendarSubscriptionsRepository`, the latter's comment admitting "mirrors releaseSyncJob
+  exactly"). The semantics — stale-lock reclaim, hard vs soft cool-down, ownership-guarded
+  release, breaker escalation — now live once in `src/lib/server/repositories/jobLock.ts`; both
+  repositories are thin column mappings over it, so a breaker fix lands once and a future
+  background-sync worker gets the same lock for free. Backoff constants renamed
+  `SYNC_*` → `JOB_*` (values unchanged). No behavior change; both existing lock test suites pass
+  unmodified in their assertions.
 - **One activity-ingest module behind all three ingestion paths** — the dedup + parse + store
   pipeline that was copy-pasted (with drifting dedup order) across the Garmin sync, bulk import,
   and single-upload services now lives in one place, `src/lib/server/services/ingestService.ts`
