@@ -16,6 +16,7 @@ import {
 	removeStreamBlob
 } from '$lib/server/services/fileStorageService';
 import {
+	DEFAULT_THR_HR,
 	intensityFactorFor,
 	loadFor as sharedLoadFor,
 	type ThresholdPrefs
@@ -173,14 +174,12 @@ function lapShortLabel(lap: Record<string, unknown>, index: number, totalActiveS
 	return String(totalActiveSeen);
 }
 
-export function computeHrZones(hrSamples: number[], maxHrHint: number | null): ActivityHrZone[] {
-	if (hrSamples.length === 0) return [];
-	const maxRef = maxHrHint && maxHrHint > 100 ? maxHrHint : maxOf(hrSamples);
-	if (!Number.isFinite(maxRef) || maxRef <= 0) return [];
+export function computeHrZones(hrSamples: number[], lthr: number): ActivityHrZone[] {
+	if (hrSamples.length === 0 || !(lthr > 0)) return [];
 	const counts = [0, 0, 0, 0, 0];
 	for (const hr of hrSamples) {
 		if (!Number.isFinite(hr) || hr <= 0) continue;
-		counts[hrZoneIndex(hr, maxRef)]! += 1;
+		counts[hrZoneIndex(hr, lthr)]! += 1;
 	}
 	const total = counts.reduce((a, b) => a + b, 0);
 	if (total === 0) return [];
@@ -221,11 +220,10 @@ export async function getActivityDetail(input: {
 	if (!activity) return null;
 	const prefs = input.prefs ?? null;
 	const units: Units = prefs?.units ?? 'imperial';
-	// Prefer the athlete's configured max HR as the zone reference, matching the
-	// dashboard's time-in-zone card — otherwise the same activity bucketed against
-	// its own sample max here and against prefs.maxHrBpm there, showing different
-	// zone distributions on the two views.
-	const userMaxHr = prefs?.maxHrBpm && prefs.maxHrBpm > 100 ? prefs.maxHrBpm : null;
+	// HR zones (the detail card and the map's HR coloring) anchor on the athlete's
+	// LTHR — same basis as the dashboard's time-in-zone card — falling back to the
+	// app default when untested, so every view agrees.
+	const lthr = prefs?.thresholdHrBpm && prefs.thresholdHrBpm > 0 ? prefs.thresholdHrBpm : DEFAULT_THR_HR;
 
 	const [fileRow, link, streamRaw] = await Promise.all([
 		activity.activityFileId
@@ -320,11 +318,9 @@ export async function getActivityDetail(input: {
 	const hrAvail = rawHr.length > 0;
 	const hasPace = rawSpeed.length > 0 && rawSpeed.some((s) => s > 0.5);
 
-	// Max-HR reference (same basis as the zone histogram), so the map can bucket
+	// LTHR reference (same basis as the zone histogram), so the map can bucket
 	// points into HR zones client-side.
-	const maxHrCandidate =
-		userMaxHr ?? (activity.maxHr && activity.maxHr > 100 ? activity.maxHr : rawHr.length ? maxOf(rawHr) : 0);
-	const maxHrRef = Number.isFinite(maxHrCandidate) && maxHrCandidate > 0 ? maxHrCandidate : null;
+	const lthrRef = hrAvail ? lthr : null;
 
 	// Shared point array driving BOTH the route map and the time-series charts.
 	// Capped by even time/order sampling (not GPS geometry — see sampleEven): most
@@ -383,7 +379,7 @@ export async function getActivityDetail(input: {
 	});
 
 	// HR zones
-	const hrZones = computeHrZones(rawHr, userMaxHr ?? activity.maxHr ?? null);
+	const hrZones = computeHrZones(rawHr, lthr);
 
 	// Peak efforts
 	const peaks: ActivityPeak[] = [];
@@ -458,7 +454,7 @@ export async function getActivityDetail(input: {
 		points,
 		bounds,
 		metrics: { hr: hrAvail, pace: hasPace, power: powerSeen, elevation: elevSeen },
-		maxHrRef,
+		lthrRef,
 		units,
 		durationSec: activity.durationSec ?? 0,
 		distanceLabel:

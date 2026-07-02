@@ -16,7 +16,7 @@
 	export let points: TrackPoint[];
 	export let bounds: TrackBounds | null;
 	export let metrics: ActivityTrackMetrics;
-	export let maxHrRef: number | null;
+	export let lthrRef: number | null;
 	export let hasGps: boolean;
 	export let hoverIndex: Writable<number | null>;
 
@@ -27,7 +27,7 @@
 		metrics.hr ? { key: 'hr' as Metric, label: 'HR' } : null,
 		metrics.pace ? { key: 'pace' as Metric, label: 'Pace' } : null,
 		metrics.power ? { key: 'power' as Metric, label: 'Power' } : null,
-		metrics.hr && maxHrRef ? { key: 'zone' as Metric, label: 'Zone' } : null
+		metrics.hr && lthrRef ? { key: 'zone' as Metric, label: 'Zone' } : null
 	].filter((o): o is { key: Metric; label: string } => o !== null);
 
 	let metric: Metric = 'hr';
@@ -127,7 +127,7 @@
 	function segColor(p: TrackPoint): string {
 		const v = metricValue(p);
 		if (v === null) return colFaint;
-		if (metric === 'zone') return HR_ZONE_COLORS[hrZoneIndex(v, maxHrRef ?? v)]!;
+		if (metric === 'zone') return HR_ZONE_COLORS[hrZoneIndex(v, lthrRef ?? v)]!;
 		let t = (v - metricRange.min) / (metricRange.max - metricRange.min);
 		if (metric === 'pace') t = 1 - t; // lower sec/km = faster = hotter
 		return rampColor(t);
@@ -223,7 +223,7 @@
 
 	// Imperative renders, driven reactively. Re-creating the deps array whenever
 	// any input changes is what re-triggers the draw.
-	$: baseDeps = [screen, metric, metricRange, maxHrRef, W, H, dpr, $theme];
+	$: baseDeps = [screen, metric, metricRange, lthrRef, W, H, dpr, $theme];
 	$: if (baseCtx && baseDeps) scheduleBase();
 	$: overlayDeps = [marker, W, H, dpr, $theme];
 	$: if (overlayCtx && overlayDeps) renderOverlay();

@@ -193,7 +193,7 @@ describe('getDashboardData stream cards (time-in-zone + power)', () => {
 		userId = user.id;
 	});
 
-	const prefs = { maxHrBpm: 200, ftpWatts: null } as never; // zone bounds 120/140/160/180
+	const prefs = { thresholdHrBpm: 160, ftpWatts: null } as never; // LTHR 160 → bounds 136/144/152/160
 
 	it('empty cards when no activity has a stream', async () => {
 		await createActivity({
@@ -211,10 +211,10 @@ describe('getDashboardData stream cards (time-in-zone + power)', () => {
 	});
 
 	it('aggregates HR into zones as a percentage of total HR time', async () => {
-		// 600 samples @150 bpm (Z3 with maxRef 200) + 400 @130 bpm (Z2) → 60% Z3, 40% Z2.
+		// 600 samples @148 bpm (Z3 with LTHR 160) + 400 @140 bpm (Z2) → 60% Z3, 40% Z2.
 		const records = [
-			...Array.from({ length: 600 }, () => ({ heart_rate: 150 })),
-			...Array.from({ length: 400 }, () => ({ heart_rate: 130 }))
+			...Array.from({ length: 600 }, () => ({ heart_rate: 148 })),
+			...Array.from({ length: 400 }, () => ({ heart_rate: 140 }))
 		];
 		await createActivity({
 			id: 'hrAct',
@@ -235,6 +235,36 @@ describe('getDashboardData stream cards (time-in-zone + power)', () => {
 		expect(d.zones.reduce((a, z) => a + z.pct, 0)).toBe(100);
 		// No power records → power card stays empty.
 		expect(d.power).toEqual([]);
+	});
+
+	it('excludes swim/strength HR from the zone card (LTHR is a run/bike threshold)', async () => {
+		const run = Array.from({ length: 100 }, () => ({ heart_rate: 150 })); // Z3 @LTHR 160
+		const swim = Array.from({ length: 100 }, () => ({ heart_rate: 120 })); // Z1 if counted
+		await createActivity({
+			id: 'zRun',
+			userId,
+			activityFileId: null,
+			sport: 'Run',
+			title: 'Zone run',
+			startTime: new Date('2026-06-15T08:00:00'),
+			streamPath: streamRelativePath('zRun')
+		});
+		await createActivity({
+			id: 'zSwim',
+			userId,
+			activityFileId: null,
+			sport: 'Swim',
+			title: 'Zone swim',
+			startTime: new Date('2026-06-15T09:00:00'),
+			streamPath: streamRelativePath('zSwim')
+		});
+		await writeStream('zRun', run);
+		await writeStream('zSwim', swim);
+
+		const d = await getDashboardData(userId, { now: NOW, prefs });
+		const pct = Object.fromEntries(d.zones.map((z) => [z.name.slice(0, 2), z.pct]));
+		expect(pct['Z3']).toBe(100); // only the run counted
+		expect(pct['Z1']).toBe(0); // swim excluded, not dumped into Z1
 	});
 
 	it('builds a power-duration curve with an estimated FTP when none configured', async () => {
@@ -301,7 +331,7 @@ describe('getDashboardData stream cards (time-in-zone + power)', () => {
 		expect(await getStreamMetricsForActivityIds(['healAct'])).toHaveLength(0);
 
 		const d = await getDashboardData(userId, { now: NOW, prefs });
-		expect(d.zones.find((z) => z.name.startsWith('Z3'))?.pct).toBe(100); // 150/200 = Z3
+		expect(d.zones.find((z) => z.name.startsWith('Z3'))?.pct).toBe(100); // 150 vs LTHR 160 → Z3
 
 		// The dashboard healed the row: it now exists at the current version.
 		const rows = await getStreamMetricsForActivityIds(['healAct']);

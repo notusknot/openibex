@@ -47,6 +47,16 @@ keep wishing existed.
 
 - **Power/HR zones + time-in-zone** — per activity and rolled up over a period, extending the
   dashboard cards already shipped, derived from the per-user thresholds already stored.
+- **Per-sport HR zones (LTHR per discipline)** — HR zones are currently anchored on a single LTHR
+  (`thresholdHrBpm`), which is a *run/bike* threshold. Swim HR runs ~10–15 bpm lower for the same
+  effort (horizontal position, cooler water, dive reflex, smaller working-muscle mass), so one
+  threshold can't zone all sports — the dashboard time-in-zone card had to exclude swim + strength
+  to avoid dumping most of that time into Z1. The fix is a per-sport LTHR (at least run vs bike vs
+  swim): store a threshold per discipline, tag the field test with its sport, and pick the zone set
+  by the activity's sport. Deferred from the initial LTHR feature because it needs a schema change,
+  a per-sport test flow (the 30-min TT taken once per discipline), and per-activity zone selection
+  on the aggregate card — a ~2× scope for a single-athlete MVP. Pairs naturally with the swim CSS /
+  per-sport threshold trio below.
 - **Personal records & power curve** — best-efforts (e.g. best 5k / best 20-min power), a mean-max
   power curve, and threshold history over time.
 - **Swim load via CSS** — Critical Swim Speed–based load, and a per-sport threshold trio (CSS for

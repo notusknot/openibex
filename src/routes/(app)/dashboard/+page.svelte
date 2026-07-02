@@ -559,7 +559,7 @@
 		</div>
 
 		<div class="card zones-card">
-			<div class="card-title">Time in zone</div>
+			<div class="card-title">Time in zone <span class="zones-scope oi-mono">bike &amp; run</span></div>
 			{#if dashboard.zones.length > 0}
 				<div class="zones-body">
 					{#each dashboard.zones as z}
@@ -1093,6 +1093,14 @@
 		display: flex;
 		flex-direction: column;
 		padding: 13px 15px;
+	}
+	.zones-scope {
+		font-size: 8.5px;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--faint);
+		margin-left: 5px;
 	}
 	.card-empty {
 		flex: 1;

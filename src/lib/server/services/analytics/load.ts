@@ -10,7 +10,8 @@ const intensityFactorBySport: Record<Sport, number> = {
 
 // Defaults for users who haven't set personalised thresholds yet.
 const DEFAULT_FTP = 240;
-const DEFAULT_THR_HR = 160;
+// Also the fallback LTHR anchor for HR zones when the user hasn't tested yet.
+export const DEFAULT_THR_HR = 160;
 
 export type ThresholdPrefs = {
 	ftpWatts: number | null;

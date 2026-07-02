@@ -108,15 +108,15 @@ export function maxBpmInHistogram(hist: HrHistogram): number {
 
 /**
  * Add one activity's HR histogram into a 5-bucket Z1–Z5 seconds accumulator
- * (mutated in place), bucketing each bpm against `maxHrRef`. No-op when the
- * reference is not positive.
+ * (mutated in place), bucketing each bpm against the athlete's `lthr`. No-op
+ * when the reference is not positive.
  */
-export function addHistogramZoneSeconds(into: number[], hist: HrHistogram, maxHrRef: number): void {
-	if (!(maxHrRef > 0)) return;
+export function addHistogramZoneSeconds(into: number[], hist: HrHistogram, lthr: number): void {
+	if (!(lthr > 0)) return;
 	for (const [bpmStr, sec] of Object.entries(hist)) {
 		const bpm = Number(bpmStr);
 		if (!Number.isFinite(bpm) || bpm <= 0) continue;
-		into[hrZoneIndex(bpm, maxHrRef)]! += sec;
+		into[hrZoneIndex(bpm, lthr)]! += sec;
 	}
 }
 

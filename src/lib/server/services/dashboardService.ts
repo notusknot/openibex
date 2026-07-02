@@ -6,12 +6,15 @@ import {
 	getActivitiesList,
 	type ActivityListRow
 } from '$lib/server/services/activitiesListService';
-import { loadFor as sharedLoadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
+import {
+	DEFAULT_THR_HR,
+	loadFor as sharedLoadFor,
+	type ThresholdPrefs
+} from '$lib/server/services/analytics/load';
 import {
 	STREAM_METRICS_VERSION,
 	addHistogramZoneSeconds,
 	computeActivityStreamMetrics,
-	maxBpmInHistogram,
 	serializeStreamMetrics,
 	type ActivityStreamMetrics,
 	type HrHistogram,
@@ -337,9 +340,9 @@ async function resolveStreamMetrics(
 
 // Build the real "Time in zone" and "Power profile" cards by aggregating the
 // per-activity precomputed metrics across the window:
-//   • zones  — HR histograms re-bucketed into Z1–Z5 (per activity, against the
-//     athlete's configured max HR when set, else that activity's own max) and
-//     summed, shown as a % of total HR time. Empty when no activity recorded HR.
+//   • zones  — run+bike HR histograms re-bucketed into Z1–Z5 (against the athlete's
+//     LTHR, configured or the default), summed and shown as a % of HR time. Swim and
+//     strength/other are excluded — LTHR is a run/bike threshold. Empty with no HR.
 //   • power  — max of each duration's mean-maximal watts across activities, at
 //     5 s / 1 min / 5 min / 20 min, plus FTP (configured, else ≈95% of the best
 //     20 min). Empty for athletes with no power meter, so the card shows an
@@ -350,7 +353,7 @@ export async function computeStreamCards(
 ): Promise<{ zones: DashboardZone[]; power: DashboardPower[] }> {
 	const metricsById = await resolveStreamMetrics(activities);
 
-	const userMaxHr = prefs?.maxHrBpm && prefs.maxHrBpm > 100 ? prefs.maxHrBpm : null;
+	const lthr = prefs?.thresholdHrBpm && prefs.thresholdHrBpm > 0 ? prefs.thresholdHrBpm : DEFAULT_THR_HR;
 	const zoneSeconds = [0, 0, 0, 0, 0];
 	const bestPower = new Map<number, number>(); // window seconds → best avg watts
 
@@ -358,11 +361,12 @@ export async function computeStreamCards(
 		const m = metricsById.get(a.id);
 		if (!m) continue;
 
-		if (m.hrHistogram) {
-			const maxRef =
-				userMaxHr ??
-				(a.maxHr && a.maxHr > 100 ? a.maxHr : maxBpmInHistogram(m.hrHistogram));
-			addHistogramZoneSeconds(zoneSeconds, m.hrHistogram, maxRef);
+		// LTHR is a run/bike threshold, so only run/bike HR is meaningful against it.
+		// Swim HR runs ~10-15 bpm lower for the same effort and strength/other HR
+		// isn't threshold-relative — including them dumps most of their time into Z1
+		// and skews the whole distribution. (Per-sport thresholds are on the roadmap.)
+		if (m.hrHistogram && (a.sport === 'Bike' || a.sport === 'Run')) {
+			addHistogramZoneSeconds(zoneSeconds, m.hrHistogram, lthr);
 		}
 
 		// Only activities that actually recorded power contribute to the curve.
