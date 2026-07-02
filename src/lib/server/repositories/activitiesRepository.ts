@@ -139,9 +139,11 @@ export async function getActivityBySourceFileShaForUser(input: {
 		.get();
 }
 
+/** Deliberately NOT filtered by source: garmin-sync and garmin-export share
+ * Garmin's activity-id space, so an activity imported via one path must dedupe
+ * against the other. Uploads never carry a sourceActivityId. */
 export async function getActivityBySourceActivityIdForUser(input: {
 	userId: string;
-	source: string;
 	sourceActivityId: string;
 }): Promise<DbActivity | undefined> {
 	const db = getDb();
@@ -151,7 +153,6 @@ export async function getActivityBySourceActivityIdForUser(input: {
 		.where(
 			and(
 				eq(activities.userId, input.userId),
-				eq(activities.source, input.source),
 				eq(activities.sourceActivityId, input.sourceActivityId)
 			)
 		)

@@ -9,14 +9,7 @@ import {
 	type GarminTokens,
 	type OpenGarminSession
 } from '$lib/server/sync/garmin';
-import { FitNotAnActivityError, parseFit } from '$lib/server/parsers/fit/fitParser';
-import {
-	commitActivityWithFile,
-	getActivityByFingerprintForUser,
-	getActivityBySourceActivityIdForUser,
-	getActivityBySourceFileShaForUser
-} from '$lib/server/repositories/activitiesRepository';
-import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
+import { getActivityBySourceActivityIdForUser } from '$lib/server/repositories/activitiesRepository';
 import {
 	getGarminCredentialForUser,
 	updateGarminSyncStatus,
@@ -24,12 +17,7 @@ import {
 } from '$lib/server/repositories/garminCredentialsRepository';
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
-import { gzipJson, writeStreamBlob, writeUploadFile } from '$lib/server/services/fileStorageService';
-import {
-	computeActivityStreamMetrics,
-	serializeStreamMetrics
-} from '$lib/server/services/analytics/streamAggregates';
-import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
+import { ingestFitActivity } from '$lib/server/services/ingestService';
 import { beginCriticalWork, endCriticalWork, isShuttingDown } from '$lib/server/shutdown';
 import { getLogger } from '$lib/server/logger';
 import {
@@ -172,10 +160,6 @@ function isRateLimitError(message: string): boolean {
 	return /\b429\b|too many requests|rate.?limit/i.test(message);
 }
 
-function sha256Hex(bytes: Uint8Array): string {
-	return crypto.createHash('sha256').update(Buffer.from(bytes)).digest('hex');
-}
-
 export async function syncForUser(userId: string, opts: SyncOptions = {}): Promise<SyncResult> {
 	const empty = { imported: 0, duplicate: 0, unsupported: 0, failed: 0 } as const;
 
@@ -256,144 +240,53 @@ export async function syncForUser(userId: string, opts: SyncOptions = {}): Promi
 			});
 
 			try {
-				// Dedup 1: Garmin activity id (cheap, no download).
-				const bySourceId = await getActivityBySourceActivityIdForUser({
-					userId,
-					source: GARMIN_SYNC_SOURCE,
-					sourceActivityId
-				});
+				// Cheap pre-download check: the ingest module re-runs source-id dedup
+				// authoritatively; this one exists only to skip the FIT download for
+				// activities that are already imported.
+				const bySourceId = await getActivityBySourceActivityIdForUser({ userId, sourceActivityId });
 				if (bySourceId) {
 					duplicate++;
 					if (!cursorStuck) cursorMs = ref.startTimeMs;
 					await updateImportItem({ id: itemId, batchId, userId, status: 'duplicate', activityId: bySourceId.id });
-					await updateImportBatchProgress({ id: batchId, userId, processedFiles: processed, importedCount: imported, duplicateCount: duplicate, failedCount: failed });
-					continue;
-				}
-
-				let fitBytes: Uint8Array;
-				try {
-					fitBytes = await session.downloadFitBytes(ref.activityId);
-				} catch (err) {
-					if (err instanceof GarminNoFitError) {
-						unsupported++;
-						if (!cursorStuck) cursorMs = ref.startTimeMs;
-						await updateImportItem({ id: itemId, batchId, userId, status: 'unsupported', errorMessage: err.message });
-						await updateImportBatchProgress({ id: batchId, userId, processedFiles: processed, importedCount: imported, duplicateCount: duplicate, failedCount: failed });
-						continue;
+				} else {
+					let fitBytes: Uint8Array | null = null;
+					try {
+						fitBytes = await session.downloadFitBytes(ref.activityId);
+					} catch (err) {
+						if (err instanceof GarminNoFitError) {
+							unsupported++;
+							if (!cursorStuck) cursorMs = ref.startTimeMs;
+							await updateImportItem({ id: itemId, batchId, userId, status: 'unsupported', errorMessage: err.message });
+						} else {
+							throw err;
+						}
 					}
-					throw err;
-				}
 
-				const sha256 = sha256Hex(fitBytes);
+					if (fitBytes) {
+						// The dedup + parse + store pipeline lives in ingestService; this
+						// loop only owns enumeration, the cursor, and batch bookkeeping.
+						const outcome = await ingestFitActivity({
+							userId,
+							bytes: fitBytes,
+							filename,
+							provenance: { source: GARMIN_SYNC_SOURCE, sourceActivityId },
+							originalDest: { kind: 'uploads' },
+							titleMetadata: null
+						});
 
-				// Dedup 2: exact FIT bytes (across sync, upload, and export paths).
-				const bySha = await getActivityBySourceFileShaForUser({ userId, sha256 });
-				const fileBySha = bySha ? null : await getActivityFileByShaForUser(sha256, userId);
-				if (bySha || fileBySha) {
-					duplicate++;
-					if (!cursorStuck) cursorMs = ref.startTimeMs;
-					await updateImportItem({ id: itemId, batchId, userId, status: 'duplicate', sha256, activityId: bySha?.id ?? null });
-					await updateImportBatchProgress({ id: batchId, userId, processedFiles: processed, importedCount: imported, duplicateCount: duplicate, failedCount: failed });
-					continue;
-				}
-
-				let parsed;
-				try {
-					parsed = await parseFit(fitBytes, filename);
-				} catch (err) {
-					if (err instanceof FitNotAnActivityError) {
-						unsupported++;
+						if (outcome.kind === 'imported') {
+							imported++;
+							await updateImportItem({ id: itemId, batchId, userId, status: 'imported', sha256: outcome.sha256, activityId: outcome.activityId });
+						} else if (outcome.kind === 'duplicate') {
+							duplicate++;
+							await updateImportItem({ id: itemId, batchId, userId, status: 'duplicate', sha256: outcome.sha256, activityId: outcome.activityId });
+						} else {
+							unsupported++;
+							await updateImportItem({ id: itemId, batchId, userId, status: 'unsupported', sha256: outcome.sha256, errorMessage: outcome.reason });
+						}
 						if (!cursorStuck) cursorMs = ref.startTimeMs;
-						await updateImportItem({ id: itemId, batchId, userId, status: 'unsupported', sha256, errorMessage: err.message });
-						await updateImportBatchProgress({ id: batchId, userId, processedFiles: processed, importedCount: imported, duplicateCount: duplicate, failedCount: failed });
-						continue;
 					}
-					throw err;
 				}
-
-				parsed.summary.title = composeSmartTitle({
-					metadataLookup: null,
-					sport: parsed.summary.sport,
-					startTime: parsed.summary.startTime
-				});
-
-				// Dedup 3: fingerprint (sport + start + duration + distance).
-				const byFingerprint = await getActivityByFingerprintForUser({
-					userId,
-					sport: parsed.summary.sport,
-					startTime: parsed.summary.startTime,
-					durationSec: parsed.summary.durationSec ?? null,
-					distanceM: parsed.summary.distanceM ?? null
-				});
-				if (byFingerprint) {
-					duplicate++;
-					if (!cursorStuck) cursorMs = ref.startTimeMs;
-					await updateImportItem({ id: itemId, batchId, userId, status: 'duplicate', sha256, activityId: byFingerprint.id });
-					await updateImportBatchProgress({ id: batchId, userId, processedFiles: processed, importedCount: imported, duplicateCount: duplicate, failedCount: failed });
-					continue;
-				}
-
-				// Store original FIT (tolerate an orphaned file from a prior crash).
-				let stored: { relativePath: string; sizeBytes: number };
-				try {
-					stored = await writeUploadFile({ userId, sha256, ext: 'fit', bytes: fitBytes });
-				} catch (e) {
-					if ((e as NodeJS.ErrnoException)?.code === 'EEXIST') {
-						stored = { relativePath: `uploads/${userId}/${sha256}.fit`, sizeBytes: fitBytes.byteLength };
-					} else throw e;
-				}
-
-				const activityFileId = crypto.randomUUID();
-				const activityId = crypto.randomUUID();
-				const gzipBytes = await gzipJson(parsed.stream);
-				const stream = await writeStreamBlob({ activityId, gzipBytes });
-				const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
-
-				// Atomic: the activity_file + activity rows commit together, so a
-				// crash mid-write can't leave an orphan file row. The FIT original
-				// and the stream blob were already written to disk above.
-				commitActivityWithFile({
-					file: {
-						id: activityFileId,
-						userId,
-						originalFilename: filename,
-						filePath: stored.relativePath,
-						fileType: 'fit',
-						sha256,
-						sizeBytes: stored.sizeBytes,
-						uploadedAt: new Date()
-					},
-					activity: {
-						id: activityId,
-						userId,
-						activityFileId,
-						source: GARMIN_SYNC_SOURCE,
-						sourceActivityId,
-						sourceFileSha256: sha256,
-						sourceFilename: filename,
-						importedAt: new Date(),
-						sport: parsed.summary.sport,
-						title: parsed.summary.title,
-						startTime: parsed.summary.startTime,
-						durationSec: parsed.summary.durationSec,
-						movingTimeSec: parsed.summary.movingTimeSec,
-						distanceM: parsed.summary.distanceM,
-						elevationGainM: parsed.summary.elevationGainM,
-						avgHr: parsed.summary.avgHr,
-						maxHr: parsed.summary.maxHr,
-						avgPowerW: parsed.summary.avgPowerW,
-						maxPowerW: parsed.summary.maxPowerW,
-						avgCadence: parsed.summary.avgCadence,
-						calories: parsed.summary.calories,
-						streamPath: stream.relativePath,
-						parserVersion: parsed.parserVersion
-					},
-					metrics
-				});
-
-				imported++;
-				if (!cursorStuck) cursorMs = ref.startTimeMs;
-				await updateImportItem({ id: itemId, batchId, userId, status: 'imported', sha256, activityId });
 			} catch (err) {
 				failed++;
 				cursorStuck = true; // don't advance the cursor past a transient failure

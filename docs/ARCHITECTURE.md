@@ -30,25 +30,29 @@ sprinkling checks in routes. Routes are split into `src/routes/(public)/` and
 
 ## Data flow: three ingestion paths, one store
 
-All paths converge on the same storage: `activities` + `activity_files` rows and a gzip
+All paths converge on the same per-file pipeline and the same storage. The pipeline —
+3-layer dedup → parse → store originals/stream → **atomic** `activity_file` + `activity` commit —
+lives in **one module**, `services/ingestService.ts` (`ingestFitActivity`); the three paths below
+only own their enumeration loops, cursors, and batch bookkeeping. Dedup semantics are documented
+in [DOMAIN.md](DOMAIN.md). Storage: `activities` + `activity_files` rows and a gzip
 `streams/<activityId>.json.gz` blob.
 
 **1. Single FIT upload** (`POST /activities/upload` → `fitImportService`)
-SHA-256 the bytes and reject duplicates up front → write the FIT to disk *outside* the DB
-transaction → parse → commit `activity_file` + `activity` **atomically** → write the gzip stream.
+A thin wrapper: calls the ingest module, maps a duplicate outcome onto `DuplicateUploadError` for
+the route, and records the import job.
 
 **2. Live Garmin Connect sync — experimental** (`(app)/+layout.server.ts` → `syncService`)
 `maybeTriggerAutoSync()` fires on app page loads. It acquires the per-user lock in `sync_jobs`
 (throttled to once / 15 min; a manual *Sync now* bypasses the throttle but still respects the
 lock), logs in through the unofficial `garmin-connect` library (`sync/garmin.ts`, tokens sealed
 with `SYNC_ENCRYPTION_KEY`), lists activities newer than the cursor (`garmin_credentials.lastSyncAt`),
-applies the 3-layer dedup, downloads + parses each FIT, stores it, advances the cursor, and
-releases the lock. Failures trip a circuit breaker with exponential backoff (also in `sync_jobs`).
+skips already-imported ids before downloading, hands each downloaded FIT to the ingest module,
+advances the cursor, and releases the lock. Failures trip a circuit breaker with exponential backoff (also in `sync_jobs`).
 There is **no background worker** — sync only happens when someone opens the app.
 
 **3. Offline bulk import — CLI** (`scripts/import-garmin.ts` → `garminImportService`)
 Walks a Garmin data-export directory, recursively unzips (`jszip`) to temp, discovers `.fit`
-files, dedupes by SHA-256, parses, and stores — recording **per-file** outcomes in `import_items`
+files, and hands each to the ingest module — recording **per-file** outcomes in `import_items`
 under an `import_batches` row so one bad file never aborts the batch. No Garmin API or credentials.
 Results surface at `/imports`.
 
@@ -103,6 +107,7 @@ invalid secrets). Don't read `process.env.*` elsewhere — add a field to `OpenI
 
 | Concern | Path |
 |---|---|
+| Per-file ingest (dedup + parse + store) | `src/lib/server/services/ingestService.ts` |
 | Live sync orchestration | `src/lib/server/services/sync/syncService.ts` |
 | garmin-connect adapter (login, token sealing) | `src/lib/server/sync/garmin.ts` |
 | Sync lock / throttle / circuit breaker | `src/lib/server/repositories/syncJobsRepository.ts` |

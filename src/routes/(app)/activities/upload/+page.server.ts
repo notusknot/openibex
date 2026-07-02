@@ -32,13 +32,16 @@ export const actions: Actions = {
 
 		const bytes = new Uint8Array(await file.arrayBuffer());
 
+		// The redirect is thrown OUTSIDE the try: SvelteKit redirects are thrown
+		// objects (not Errors), and the catch below would swallow one into a
+		// misleading "Import failed." response.
+		let result: Awaited<ReturnType<typeof importFitUpload>>;
 		try {
-			const result = await importFitUpload({
+			result = await importFitUpload({
 				userId: locals.user.id,
 				originalFilename: name,
 				bytes
 			});
-			throw redirect(303, `/activities/${result.activityId}`);
 		} catch (err) {
 			if (err instanceof DuplicateUploadError) {
 				return fail(400, { error: 'This activity is already in your library.' });
@@ -46,6 +49,7 @@ export const actions: Actions = {
 			const message = err instanceof Error ? err.message : 'Import failed.';
 			return fail(400, { error: message });
 		}
+		throw redirect(303, `/activities/${result.activityId}`);
 	}
 };
 

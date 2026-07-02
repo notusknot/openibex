@@ -14,6 +14,26 @@ capability and the patch version for fixes; breaking changes may land in a minor
 
 ## [Unreleased]
 
+### Changed
+- **One activity-ingest module behind all three ingestion paths** — the dedup + parse + store
+  pipeline that was copy-pasted (with drifting dedup order) across the Garmin sync, bulk import,
+  and single-upload services now lives in one place, `src/lib/server/services/ingestService.ts`
+  (`ingestFitActivity`). Canonical order: source-id → SHA-256 → parse → fingerprint → store →
+  atomic commit, with parsing before any disk write so failures are retryable. Two deliberate
+  strengthenings: **source-id dedup now matches across garmin-sync and garmin-export** (they share
+  Garmin's activity-id space, so an activity imported via one path dedupes against the other), and
+  **uploads now record full provenance** (`source: 'upload'`, `sourceFileSha256`, `sourceFilename`),
+  which also lets a re-upload dedupe against a previously synced copy of the same file. The
+  guarantee is asserted by a single canonical test suite (`ingestService.test.ts`); callers keep
+  only their own loops, cursors, and batch bookkeeping. Net behavior change is strictly *more*
+  dedup; nothing that deduped before stops deduping.
+
+### Fixed
+- **Successful single-FIT uploads now redirect to the new activity** — the upload action threw its
+  redirect inside a `try` whose generic `catch` swallowed it (SvelteKit redirects are thrown
+  objects, not `Error`s), so a successful import rendered "Import failed." while the activity was
+  actually created. The redirect now happens outside the `try`.
+
 ### Added
 - **Accurate HR zones from a threshold field test** — heart-rate zones are now anchored on your
   **lactate-threshold HR (LTHR)** using Friel's %LTHR bands (Z1 <85%, Z2 85–89%, Z3 90–94%,
