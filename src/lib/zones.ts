@@ -12,13 +12,15 @@ export const HR_ZONE_NAMES = [
 
 export const HR_ZONE_COLORS = ['#9fc2a8', '#3c7a53', '#d2a03a', '#c0892e', '#9a4b2e'] as const;
 
-// Lower bound of each zone as a fraction of max HR.
-export const HR_ZONE_THRESHOLD_PCT = [0, 0.6, 0.7, 0.8, 0.9] as const;
+// Lower bound of each zone as a fraction of LTHR (lactate-threshold HR), per
+// Friel. 100% LTHR sits exactly on the Z4/Z5 boundary — the physiologically
+// meaningful cut. Anchored on the user's measured `thresholdHrBpm`, not max HR.
+export const HR_ZONE_THRESHOLD_PCT = [0, 0.85, 0.9, 0.95, 1.0] as const;
 
-/** Zone bucket (0–4) for a heart-rate sample given a max-HR reference. */
-export function hrZoneIndex(hr: number, maxRef: number): number {
-	if (!Number.isFinite(hr) || hr <= 0 || !Number.isFinite(maxRef) || maxRef <= 0) return 0;
-	const pct = hr / maxRef;
+/** Zone bucket (0–4) for a heart-rate sample given an LTHR reference. */
+export function hrZoneIndex(hr: number, lthr: number): number {
+	if (!Number.isFinite(hr) || hr <= 0 || !Number.isFinite(lthr) || lthr <= 0) return 0;
+	const pct = hr / lthr;
 	for (let z = HR_ZONE_THRESHOLD_PCT.length - 1; z >= 0; z--) {
 		if (pct >= HR_ZONE_THRESHOLD_PCT[z]!) return z;
 	}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { paceFromSecPerKm, paceUnit, type Units } from '$lib/units';
 
 	export let data: PageData;
@@ -47,6 +48,28 @@
 	let importing = false;
 	let importFailed = false;
 	$: importError = gform.importError as string | undefined;
+
+	// HR-zone field-test wizard.
+	$: testActivities = data.hrTestActivities ?? [];
+	$: lthrTest = data.lthrTest;
+	$: lthrUncalibrated = data.userPrefs?.thresholdHrBpm == null;
+	$: lthrError = gform.lthrError as string | undefined;
+	$: lthrSaved = gform.lthrSaved as number | undefined;
+	let savingLthr = false;
+
+	function testOptionLabel(a: { title: string; startTimeMs: number }): string {
+		const d = new Date(a.startTimeMs).toLocaleDateString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
+		return `${a.title} · ${d}`;
+	}
+	function onPickTest(e: Event) {
+		const id = (e.currentTarget as HTMLSelectElement).value;
+		const q = id ? `?test=${encodeURIComponent(id)}` : '';
+		goto(`/settings${q}`, { keepFocus: true, noScroll: true });
+	}
 
 	// Calendar (ICS) subscriptions.
 	$: calendar = data.calendar;
@@ -288,6 +311,107 @@
 					<button type="submit" class="btn btn-primary" disabled={saving}>Save changes</button>
 				</footer>
 			</form>
+
+			<section id="hrzones" class="card">
+				<div class="card-title">Heart-rate zones</div>
+				<div class="card-eyebrow oi-mono">
+					Your Z1–Z5 zones are anchored on your lactate-threshold HR (LTHR), the Friel
+					standard — 100% LTHR is the Z4/Z5 line. Set it accurately with a 30-minute field
+					test, then pick that activity below to auto-detect it.
+				</div>
+
+				{#if lthrUncalibrated}
+					<div class="form-notice">
+						Your zones currently use the default LTHR of 160 bpm — take the test below to
+						calibrate them to you.
+					</div>
+				{/if}
+
+				<ol class="protocol oi-mono">
+					<li>Warm up 15 min easy.</li>
+					<li>30 min all-out at a steady, sustainable max — solo, flattish, no stopping.</li>
+					<li>Cool down 10 min easy.</li>
+				</ol>
+
+				<label class="field">
+					<span class="field-label oi-mono">Interpret a test activity</span>
+					<select class="oi-input" on:change={onPickTest}>
+						<option value="">Select the activity you did the test in…</option>
+						{#each testActivities as a (a.id)}
+							<option value={a.id} selected={a.id === data.testActivityId}>
+								{testOptionLabel(a)}
+							</option>
+						{/each}
+					</select>
+				</label>
+
+				{#if lthrTest}
+					{#if lthrTest.lthr === null}
+						<div class="form-error">
+							Couldn't detect an LTHR — “{lthrTest.activityTitle}” has
+							{lthrTest.hasHr ? 'under 20 minutes of' : 'no'} heart-rate data. Pick your 30-min
+							test activity.
+						</div>
+					{:else}
+						<div class="lthr-result">
+							<div class="lthr-headline">
+								Detected LTHR <strong>{lthrTest.lthr} bpm</strong>
+								<span class="row-help oi-mono">
+									from the hardest 20 min ({lthrTest.segmentLabel}) of “{lthrTest.activityTitle}”
+								</span>
+							</div>
+
+							{#if !lthrTest.looksMaximal}
+								<div class="form-error">
+									This doesn't look like a maximal 30-min test — the detected LTHR may be low.
+									Save only if you're confident it was an all-out effort.
+								</div>
+							{/if}
+
+							<div class="zone-table">
+								{#each lthrTest.zones as z}
+									<div class="zone-row">
+										<span class="zone-swatch" style="background: {z.color}"></span>
+										<span class="zone-name">{z.name}</span>
+										<span class="zone-range oi-mono">{z.range}</span>
+									</div>
+								{/each}
+							</div>
+
+							<form
+								method="POST"
+								action="?/saveLthr"
+								use:enhance={() => {
+									savingLthr = true;
+									return async ({ result, update }) => {
+										savingLthr = false;
+										// Keep the manual Thr. HR field in sync so a later "Save changes"
+										// on the profile form doesn't wipe the LTHR we just stored.
+										if (result.type === 'success' && lthrTest?.lthr != null) {
+											thrHrInput = String(lthrTest.lthr);
+										}
+										await update({ reset: false });
+									};
+								}}
+							>
+								<input type="hidden" name="lthr" value={lthrTest.lthr} />
+								<div class="lthr-foot">
+									{#if lthrSaved}
+										<span class="save-status oi-mono">Saved LTHR {lthrSaved} bpm.</span>
+									{/if}
+									<button class="btn btn-primary" disabled={savingLthr}>
+										{savingLthr ? 'Saving…' : 'Save these zones'}
+									</button>
+								</div>
+							</form>
+						</div>
+					{/if}
+				{/if}
+
+				{#if lthrError}
+					<div class="form-error">{lthrError}</div>
+				{/if}
+			</section>
 
 			<section id="integrations" class="card">
 				<div class="card-title">
@@ -924,6 +1048,74 @@
 		font: 400 12px 'Archivo', system-ui, sans-serif;
 		padding: 8px 11px;
 		cursor: pointer;
+	}
+
+	.protocol {
+		margin: 0 0 14px;
+		padding-left: 18px;
+		font-size: 11px;
+		color: var(--ink-soft);
+		line-height: 1.7;
+	}
+	select.oi-input {
+		cursor: pointer;
+	}
+	.lthr-result {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin-top: 14px;
+		padding-top: 14px;
+		border-top: 1px solid var(--line);
+	}
+	.lthr-headline {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--ink2);
+	}
+	.lthr-headline strong {
+		color: var(--green);
+	}
+	.lthr-headline .row-help {
+		display: block;
+		font-weight: 400;
+		margin-top: 4px;
+	}
+	.zone-table {
+		display: flex;
+		flex-direction: column;
+	}
+	.zone-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 7px 0;
+		border-top: 1px solid var(--line);
+	}
+	.zone-row:first-child {
+		border-top: none;
+	}
+	.zone-swatch {
+		width: 11px;
+		height: 11px;
+		border-radius: 3px;
+		flex: none;
+	}
+	.zone-name {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink);
+		flex: 1;
+	}
+	.zone-range {
+		font-size: 11px;
+		color: var(--muted);
+	}
+	.lthr-foot {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		gap: 10px;
 	}
 	.card-eyebrow code,
 	.row-help code,

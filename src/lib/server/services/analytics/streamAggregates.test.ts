@@ -59,12 +59,12 @@ describe('computeActivityStreamMetrics', () => {
 });
 
 describe('addHistogramZoneSeconds', () => {
-	it('buckets bpm against max HR and accumulates in place', () => {
-		// maxRef 200 → zone bounds at 120/140/160/180 bpm.
+	it('buckets bpm against LTHR and accumulates in place', () => {
+		// lthr 160 → zone bounds at 136/144/152/160 bpm (0.85/0.90/0.95/1.00).
 		const into = [0, 0, 0, 0, 0];
-		addHistogramZoneSeconds(into, { '100': 1, '130': 1, '150': 1, '170': 1, '190': 1 }, 200);
+		addHistogramZoneSeconds(into, { '120': 1, '138': 1, '148': 1, '156': 1, '165': 1 }, 160);
 		expect(into).toEqual([1, 1, 1, 1, 1]);
-		addHistogramZoneSeconds(into, { '130': 9 }, 200); // Z2
+		addHistogramZoneSeconds(into, { '138': 9 }, 160); // Z2
 		expect(into).toEqual([1, 10, 1, 1, 1]);
 	});
 

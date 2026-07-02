@@ -6,6 +6,8 @@ import { updateProfileDisplayName } from '$lib/server/services/authService';
 import { updateUserPreferences } from '$lib/server/repositories/usersRepository';
 import { validateDisplayName } from '$lib/validation/displayName';
 import { parseUserPreferencesForm } from '$lib/validation/userPreferences';
+import { getActivitiesList } from '$lib/server/services/activitiesListService';
+import { interpretLthrTestForActivity } from '$lib/server/services/lthrTestService';
 import {
 	deleteGarminCredentialForUser,
 	getGarminCredentialForUser,
@@ -59,13 +61,28 @@ async function loadGarminStatus(userId: string) {
 	};
 }
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) throw redirect(303, '/login');
+	const userId = locals.user.id;
+
+	// HR-zone test wizard: the activity dropdown (activities that recorded HR,
+	// newest first) plus, when `?test=<id>` is set, the interpreted LTHR result.
+	const testId = url.searchParams.get('test');
+	const [list, lthrTest] = await Promise.all([
+		getActivitiesList({ userId, prefs: locals.userPrefs }),
+		testId ? interpretLthrTestForActivity({ userId, activityId: testId }) : Promise.resolve(null)
+	]);
+
 	return {
 		user: locals.user,
 		userPrefs: locals.userPrefs,
-		garmin: await loadGarminStatus(locals.user.id),
-		calendar: await getCalendarSyncSummaryForUser(locals.user.id)
+		garmin: await loadGarminStatus(userId),
+		calendar: await getCalendarSyncSummaryForUser(userId),
+		hrTestActivities: list.rows
+			.filter((r) => r.avgHr != null)
+			.sort((a, b) => b.startTimeMs - a.startTimeMs),
+		lthrTest,
+		testActivityId: testId
 	};
 };
 
@@ -101,6 +118,20 @@ export const actions: Actions = {
 			Object.assign(locals.userPrefs, prefsCheck.value);
 		}
 		return { success: true };
+	},
+
+	// Save a detected LTHR from the HR-zone field-test wizard. Writes only the
+	// thresholdHrBpm field (partial update), leaving other prefs untouched.
+	saveLthr: async ({ locals, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
+		const n = Number(String(form.get('lthr') ?? '').trim());
+		if (!Number.isInteger(n) || n < 100 || n > 220) {
+			return fail(400, { lthrError: 'Detected LTHR is out of the accepted range (100–220 bpm).' });
+		}
+		await updateUserPreferences(locals.user.id, { thresholdHrBpm: n });
+		if (locals.userPrefs) locals.userPrefs.thresholdHrBpm = n;
+		return { lthrSaved: n };
 	},
 
 	// Experimental Garmin sync — connect with email + password, store only the

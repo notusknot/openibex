@@ -36,7 +36,7 @@ export type ActivityTrack = {
 	points: TrackPoint[];
 	bounds: TrackBounds | null;
 	metrics: ActivityTrackMetrics;
-	maxHrRef: number | null; // max-HR basis for client-side HR-zone coloring
+	lthrRef: number | null; // LTHR basis for client-side HR-zone coloring
 	units: 'metric' | 'imperial'; // for client-side elevation readouts
 	durationSec: number;
 	distanceLabel: string;

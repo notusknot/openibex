@@ -25,8 +25,8 @@ export const users = sqliteTable('users', {
 	// Training thresholds — null = use app defaults. Stored as plain numbers
 	// in SI-friendly units regardless of the user's display preference:
 	//   ftpWatts        — cycling functional threshold power
-	//   thresholdHrBpm  — lactate-threshold heart rate
-	//   maxHrBpm        — observed max HR (used as zone reference)
+	//   thresholdHrBpm  — lactate-threshold heart rate (anchors the HR zones)
+	//   maxHrBpm        — observed max HR (recorded only; not used in any computation)
 	//   thresholdPaceSecPerKm — running threshold pace, sec/km internally
 	ftpWatts: integer('ftp_watts'),
 	thresholdHrBpm: integer('threshold_hr_bpm'),
@@ -203,8 +203,8 @@ export const activities = sqliteTable(
 //
 // Stored prefs-independently so they never go stale on a settings change:
 //   hrHistogramJson — seconds per integer bpm `{ "150": 600, ... }`. Re-bucketed
-//     into HR zones at READ time against the current max-HR reference, so
-//     changing maxHrBpm (or adopting a different zone model) needs no recompute.
+//     into HR zones at READ time against the athlete's LTHR (thresholdHrBpm), so
+//     calibrating LTHR (or adopting a different zone model) needs no recompute.
 //   powerCurveJson  — mean-maximal watts per duration `{ "5": 800, "60": 410 }`
 //     over a canonical duration set; null when the activity recorded no power.
 //     Aggregated across activities by max() per duration.

@@ -15,6 +15,22 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Accurate HR zones from a threshold field test** — heart-rate zones are now anchored on your
+  **lactate-threshold HR (LTHR)** using Friel's %LTHR bands (Z1 <85%, Z2 85–89%, Z3 90–94%,
+  Z4 95–99%, Z5 ≥100%), replacing the old fixed % of max HR. A new **Heart-rate zones** section in
+  Settings walks you through the 30-minute field-test protocol, then interprets a chosen test
+  activity: it finds the hardest continuous 20 minutes of HR (`bestRollingAverage`-style scan),
+  reports that average as your LTHR with the segment it used, previews the resulting Z1–Z5 bpm
+  ranges, and saves it on confirm. A soft warning flags activities that don't look like a maximal
+  test (too little HR, or no clear hard block), and a nudge appears while your LTHR is still the
+  default. The dashboard time-in-zone card, activity-detail zone card, and route-map HR coloring all
+  re-anchor on LTHR (falling back to the app default of 160 when untested) so the three views agree;
+  the dashboard card counts **bike + run only** (labelled as such), since LTHR is a run/bike
+  threshold and swim HR (~10–15 bpm lower) or strength/other would otherwise skew into Z1.
+  Because time-in-zone is bucketed at read time from stored per-bpm histograms, calibrating your LTHR
+  **re-buckets all historical activities with no migration**. Interpretation is a pure, unit-tested
+  module (`src/lib/server/services/analytics/lthrTest.ts`); the flow goes route → `lthrTestService`
+  → existing stream storage, reusing the `thresholdHrBpm` column with no schema change.
 - **Revisiting a page is instant (client-side stale-while-revalidate cache)** — SvelteKit re-runs a
   page's `load` on every navigation and caches nothing, so bouncing between the activities list, an
   activity, and the calendar re-showed the streaming skeleton each time. A small client-only cache

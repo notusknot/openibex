@@ -34,7 +34,32 @@ where `hours = durationSec / 3600`.
 | Other | 0.50 |
 
 **Thresholds** are per-user (`ftpWatts`, `thresholdHrBpm`); when unset, defaults are
-**FTP = 240 W** and **threshold HR = 160 bpm**.
+**FTP = 240 W** and **threshold HR = 160 bpm**. `thresholdHrBpm` (LTHR) also anchors the HR zones
+below. `maxHrBpm` is recorded but no longer drives any computation.
+
+## Heart-rate zones
+
+Zones are **% of LTHR** (lactate-threshold HR = `thresholdHrBpm`, default 160), per Friel — 100% LTHR
+is the Z4/Z5 boundary. The bands live in `src/lib/zones.ts` (`HR_ZONE_THRESHOLD_PCT`):
+
+| Zone | Name | Lower bound |
+|---|---|---:|
+| Z1 | Recovery | < 85% LTHR |
+| Z2 | Endurance | 85% |
+| Z3 | Tempo | 90% |
+| Z4 | Threshold | 95% |
+| Z5 | VO₂ | ≥ 100% |
+
+Bucketing is done at **read time** from each activity's stored per-bpm HR histogram, so changing LTHR
+re-buckets all history with no migration. The dashboard time-in-zone card, the activity-detail zone
+card, and the route-map HR coloring all share this one reference.
+
+**LTHR field test.** Settings → *Heart-rate zones* recommends a **30-minute time trial** (Friel):
+LTHR = the average HR of the final 20 minutes of a steady all-out effort. Interpretation
+(`analytics/lthrTest.ts`) finds the **highest-average 20-minute window** in the activity's HR stream —
+because HR drifts up under load, that window *is* the last 20 of the effort. It's a soft, transparent
+heuristic: the athlete confirms the detected value (and is warned if the activity doesn't look
+maximal) before it's saved.
 
 ## Performance Management Chart: Fitness / Fatigue / Form
 

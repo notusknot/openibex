@@ -119,7 +119,7 @@
 					points={track.points}
 					bounds={track.bounds}
 					metrics={track.metrics}
-					maxHrRef={track.maxHrRef}
+					lthrRef={track.lthrRef}
 					hasGps={track.hasGps}
 					{hoverIndex}
 				/>

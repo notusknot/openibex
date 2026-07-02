@@ -51,16 +51,16 @@ describe('computeHrZones', () => {
 		expect(computeHrZones([], 180)).toEqual([]);
 	});
 
-	it('buckets HR samples into 5 zones by % of maxHr', () => {
-		// maxHr = 200, so thresholds at 120/140/160/180 (60/70/80/90%).
+	it('buckets HR samples into 5 zones by % of LTHR', () => {
+		// lthr = 160, so thresholds at 136/144/152/160 (85/90/95/100%).
 		const samples = [
-			100, 110,             // Z1 (<120)  -> 2
-			125, 130, 135,        // Z2 (120-139) -> 3
-			145, 150,             // Z3 (140-159) -> 2
-			165, 170, 175,        // Z4 (160-179) -> 3
-			185, 195              // Z5 (>=180) -> 2
+			120, 130,             // Z1 (<136)  -> 2
+			138, 140, 142,        // Z2 (136-143) -> 3
+			146, 148,             // Z3 (144-151) -> 2
+			154, 156, 158,        // Z4 (152-159) -> 3
+			165, 170              // Z5 (>=160) -> 2
 		];
-		const zones = computeHrZones(samples, 200);
+		const zones = computeHrZones(samples, 160);
 		expect(zones.length).toBe(5);
 		const total = samples.length;
 		expect(zones[0]!.pct).toBe(Math.round((2 / total) * 100));
@@ -70,14 +70,7 @@ describe('computeHrZones', () => {
 		expect(zones[4]!.pct).toBe(Math.round((2 / total) * 100));
 	});
 
-	it('falls back to max of samples when maxHrHint is missing', () => {
-		// No hint -> use max(samples) = 200; everything is <90% so Z5 percentage is small.
-		const samples = [120, 140, 160, 180, 200];
-		const zones = computeHrZones(samples, null);
-		expect(zones.length).toBe(5);
-		// 200/200 = 100% => Z5 has 1 sample, Z4 has 1 sample (180/200=90% -> Z5 actually).
-		// 60%=120 (Z2), 70%=140 (Z3), 80%=160 (Z4), 90%=180 (Z5), 100%=200 (Z5)
-		expect(zones[0]!.pct).toBe(0);
-		expect(zones[4]!.pct).toBe(Math.round((2 / 5) * 100));
+	it('returns empty when LTHR is not positive', () => {
+		expect(computeHrZones([120, 140, 160], 0)).toEqual([]);
 	});
 });
