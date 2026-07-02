@@ -15,6 +15,16 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Changed
+- **Dashboard page split into card components** — `dashboard/+page.svelte` was a 1358-line
+  monolith holding eight concerns and ~700 lines of inline CSS; every planned dashboard feature
+  (morning verdict, week intensity strip, race countdown) would have landed in it. It is now a
+  204-line composition of nine colocated card components (`PmcChart`, `KpiStrip`,
+  `WeeklyVolumeBars`, `ReadinessCard`, `MonotonyStrainCard`, `SportSplitCard`, `TimeInZonesCard`,
+  `PowerProfileCard`, `RecentActivitiesTable`), each owning its markup, scoped CSS, and local
+  hover/range state. The SVG coordinate math moved to a pure module (`chartGeometry.ts` — series
+  in, coordinates out) with its own unit tests; shared metric-tooltip copy lives in `statTips.ts`.
+  No visual or behavioral change (verified: mobile screenshots pixel-identical before/after,
+  desktop visually identical, hover/range interactions exercised, zero unused-CSS warnings).
 - **One durable coordination-lock module for sync and calendar** — the DB-backed lock + throttle +
   exponential backoff + circuit breaker was implemented twice (`syncJobsRepository` and
   `calendarSubscriptionsRepository`, the latter's comment admitting "mirrors releaseSyncJob
