@@ -2,18 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { getEnv } from '$lib/server/env';
-import { FitNotAnActivityError, parseFit } from '$lib/server/parsers/fit/fitParser';
-import { commitActivityWithFile, getActivityByFingerprintForUser, getActivityBySourceActivityIdForUser, getActivityBySourceFileShaForUser } from '$lib/server/repositories/activitiesRepository';
-import { getActivityFileByShaForUser } from '$lib/server/repositories/activityFilesRepository';
 import { createImportBatch, updateImportBatchProgress } from '$lib/server/repositories/importBatchesRepository';
 import { createImportItem, updateImportItem } from '$lib/server/repositories/importItemsRepository';
 import { getUserByEmail } from '$lib/server/repositories/usersRepository';
-import { gzipJson, writeStreamBlob } from '$lib/server/services/fileStorageService';
-import {
-	computeActivityStreamMetrics,
-	serializeStreamMetrics
-} from '$lib/server/services/analytics/streamAggregates';
+import { writeImportOriginal } from '$lib/server/services/fileStorageService';
+import { ingestFitActivity } from '$lib/server/services/ingestService';
 import {
 	discoverCandidateFiles,
 	expandZipsToTemp,
@@ -21,7 +14,6 @@ import {
 	type DiscoveredFile
 } from '$lib/server/services/imports/discovery';
 import { loadGarminMetadata } from '$lib/server/services/imports/garminMetadata';
-import { composeSmartTitle } from '$lib/server/services/imports/titleStrategy';
 
 export type GarminImportSummary = {
 	batchId: string;
@@ -48,10 +40,6 @@ function extFromFormat(fmt: string): string {
 		default:
 			return 'bin';
 	}
-}
-
-function importOriginalRelativePath(batchId: string, sha256: string, ext: string): string {
-	return path.posix.join('imports', batchId, 'originals', `${sha256}.${ext}`);
 }
 
 async function sha256HexOfFile(absPath: string): Promise<string> {
@@ -181,50 +169,18 @@ export async function importGarminHistoricalExport(input: {
 			await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'processing' });
 
 			try {
-				// Dedup 1: exact file SHA (across any previous Garmin imports).
-				const existingBySha = await getActivityBySourceFileShaForUser({ userId: user.id, sha256: c.sha256 });
-				if (existingBySha) {
-					duplicateCount += 1;
-					await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'duplicate', activityId: existingBySha.id });
-					await updateImportBatchProgress({ id: batchId, userId: user.id, processedFiles, importedCount, duplicateCount, failedCount });
-					continue;
-				}
-
-				// Also dedupe against previously uploaded files (Milestone 3 uploads).
-				const existingFile = await getActivityFileByShaForUser(c.sha256, user.id);
-				if (existingFile) {
-					duplicateCount += 1;
-					await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'duplicate' });
-					await updateImportBatchProgress({ id: batchId, userId: user.id, processedFiles, importedCount, duplicateCount, failedCount });
-					continue;
-				}
-
-				// Dedup 2: Garmin activity id (best-effort from filename).
-				if (c.sourceActivityId) {
-					const existingBySourceId = await getActivityBySourceActivityIdForUser({
-						userId: user.id,
-						source: 'garmin-export',
-						sourceActivityId: c.sourceActivityId
-					});
-					if (existingBySourceId) {
-						duplicateCount += 1;
-						await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'duplicate', activityId: existingBySourceId.id });
-						await updateImportBatchProgress({ id: batchId, userId: user.id, processedFiles, importedCount, duplicateCount, failedCount });
-						continue;
-					}
-				}
-
 				if (c.detectedFormat !== 'fit') {
 					// TCX/GPX only supported if parsers exist; currently not implemented.
-					const ext = extFromFormat(c.detectedFormat);
-					const relOriginal = importOriginalRelativePath(batchId, c.sha256, ext);
-					const absOriginal = path.join(getEnv().OPENIBEX_DATA_DIR, relOriginal);
-					await fs.mkdir(path.dirname(absOriginal), { recursive: true });
+					// Archive the original with the batch anyway (EEXIST = already there).
 					try {
-						const bytes = await fs.readFile(c.absPath);
-						await fs.writeFile(absOriginal, bytes, { flag: 'wx' });
-					} catch (e: any) {
-						if (e?.code !== 'EEXIST') throw e;
+						await writeImportOriginal({
+							batchId,
+							sha256: c.sha256,
+							ext: extFromFormat(c.detectedFormat),
+							bytes: await fs.readFile(c.absPath)
+						});
+					} catch (e) {
+						if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') throw e;
 					}
 					await updateImportItem({
 						id: itemId,
@@ -237,113 +193,32 @@ export async function importGarminHistoricalExport(input: {
 					continue;
 				}
 
-				const ext = extFromFormat(c.detectedFormat);
-				const relOriginal = importOriginalRelativePath(batchId, c.sha256, ext);
-				const bytes = await fs.readFile(c.absPath);
-
-				const absOriginal = path.join(getEnv().OPENIBEX_DATA_DIR, relOriginal);
-				await fs.mkdir(path.dirname(absOriginal), { recursive: true });
-				try {
-					await fs.writeFile(absOriginal, bytes, { flag: 'wx' });
-				} catch (e: any) {
-					if (e?.code !== 'EEXIST') throw e;
-				}
-
-				let parsed;
-				try {
-					parsed = await parseFit(bytes, c.originalFilename);
-				} catch (err) {
-					if (err instanceof FitNotAnActivityError) {
-						await updateImportItem({
-							id: itemId,
-							batchId,
-							userId: user.id,
-							status: 'unsupported',
-							errorMessage: err.message
-						});
-						await updateImportBatchProgress({
-							id: batchId,
-							userId: user.id,
-							processedFiles,
-							importedCount,
-							duplicateCount,
-							failedCount
-						});
-						continue;
-					}
-					throw err;
-				}
-				parsed.summary.title = composeSmartTitle({
-					metadataLookup,
-					sport: parsed.summary.sport,
-					startTime: parsed.summary.startTime
-				});
-
-				// Dedup 3: fallback fingerprint (only after parsing).
-				const existingByFingerprint = await getActivityByFingerprintForUser({
+				// The dedup + parse + store pipeline lives in ingestService; this loop
+				// only owns discovery and the per-item batch bookkeeping.
+				const outcome = await ingestFitActivity({
 					userId: user.id,
-					sport: parsed.summary.sport,
-					startTime: parsed.summary.startTime,
-					durationSec: parsed.summary.durationSec ?? null,
-					distanceM: parsed.summary.distanceM ?? null
+					bytes: await fs.readFile(c.absPath),
+					filename: c.originalFilename,
+					provenance: { source: 'garmin-export', sourceActivityId: c.sourceActivityId },
+					originalDest: { kind: 'import-batch', batchId },
+					titleMetadata: metadataLookup
 				});
-				if (existingByFingerprint) {
+
+				if (outcome.kind === 'imported') {
+					importedCount += 1;
+					await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'imported', activityId: outcome.activityId });
+				} else if (outcome.kind === 'duplicate') {
 					duplicateCount += 1;
-					await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'duplicate', activityId: existingByFingerprint.id });
-					await updateImportBatchProgress({ id: batchId, userId: user.id, processedFiles, importedCount, duplicateCount, failedCount });
-					continue;
+					await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'duplicate', activityId: outcome.activityId });
+				} else {
+					await updateImportItem({
+						id: itemId,
+						batchId,
+						userId: user.id,
+						status: 'unsupported',
+						errorMessage: outcome.reason
+					});
 				}
-
-				const activityFileId = crypto.randomUUID();
-				const activityId = crypto.randomUUID();
-				const gzipBytes = await gzipJson(parsed.stream);
-				const stream = await writeStreamBlob({ activityId, gzipBytes });
-				const metrics = serializeStreamMetrics(computeActivityStreamMetrics(parsed.stream));
-
-				// Atomic: the activity_file + activity rows commit together, so a
-				// crash can't leave an orphan file row. The stream blob (and the
-				// original FIT) were written to disk above, outside the transaction.
-				commitActivityWithFile({
-					file: {
-						id: activityFileId,
-						userId: user.id,
-						originalFilename: c.originalFilename,
-						filePath: relOriginal,
-						fileType: 'fit',
-						sha256: c.sha256,
-						sizeBytes: c.sizeBytes,
-						uploadedAt: new Date()
-					},
-					activity: {
-						id: activityId,
-						userId: user.id,
-						activityFileId,
-						source: 'garmin-export',
-						sourceActivityId: c.sourceActivityId,
-						sourceFileSha256: c.sha256,
-						sourceFilename: c.originalFilename,
-						importedAt: new Date(),
-						sport: parsed.summary.sport,
-						title: parsed.summary.title,
-						startTime: parsed.summary.startTime,
-						durationSec: parsed.summary.durationSec,
-						movingTimeSec: parsed.summary.movingTimeSec,
-						distanceM: parsed.summary.distanceM,
-						elevationGainM: parsed.summary.elevationGainM,
-						avgHr: parsed.summary.avgHr,
-						maxHr: parsed.summary.maxHr,
-						avgPowerW: parsed.summary.avgPowerW,
-						maxPowerW: parsed.summary.maxPowerW,
-						avgCadence: parsed.summary.avgCadence,
-						calories: parsed.summary.calories,
-						streamPath: stream.relativePath,
-						parserVersion: parsed.parserVersion
-					},
-					metrics
-				});
-
-				importedCount += 1;
-				await updateImportItem({ id: itemId, batchId, userId: user.id, status: 'imported', activityId });
 			} catch (e) {
 				failedCount += 1;
 				const msg = e instanceof Error ? e.message : 'Import failed.';

@@ -107,18 +107,27 @@ science. Current thresholds:
 
 ## Deduplication guarantees (3 layers)
 
-Across all three ingestion paths (upload, live sync, bulk import), an activity is deduped by, in
-order of cost:
+The guarantee is owned by a single module: **`src/lib/server/services/ingestService.ts`**
+(`ingestFitActivity`) — the per-file **ingest** pipeline behind all three ingestion paths (upload,
+live sync, bulk import). Callers keep their own loops, cursors, and batch bookkeeping; they never
+re-implement dedup. Canonical order, cheapest first:
 
-1. **Garmin activity id** (`sourceActivityId`) — cheapest; skips before downloading.
+1. **Garmin activity id** (`sourceActivityId`) — matched **across** `garmin-sync` and
+   `garmin-export` (they share Garmin's id space), so an activity imported via one path dedupes
+   against the other. The live sync also runs this check before downloading, purely to skip the
+   download; the ingest module remains authoritative.
 2. **FIT bytes SHA-256** (`sourceFileSha256` / `activity_files.sha256`) — exact content match
    across sync, upload, and export. Re-importing the same export is a no-op.
 3. **Fingerprint** — `sport + startTime + duration + distance`, applied after parse as a final
-   guard against the same activity arriving via different files.
+   guard against the same activity arriving via different files (e.g. a Garmin re-encode).
+
+Parsing happens **before any disk write**, so a parse failure is fully retryable and leaves no
+orphans. The canonical test surface is `ingestService.test.ts`.
 
 ## Data-model invariants
 
 - `activities.source` ∈ `{ garmin-sync, garmin-export, upload }` — provenance is never lost.
+  (Uploads imported before the shared ingest module stored `null`; new rows always carry it.)
 - `parserVersion` is stored per activity so re-parsing/backfills are detectable.
 - **Sync cursor** = `garmin_credentials.lastSyncAt` (epoch ms of the newest imported activity);
   the live sync only pulls activities newer than this.
@@ -131,6 +140,8 @@ order of cost:
 
 ## Glossary
 
+- **Ingest** — the per-file pipeline (3-layer dedup → parse → store → atomic commit) shared by all
+  three ingestion paths; owned by `ingestService.ts`.
 - **CTL / Fitness** — chronic training load; long-term (42d) load trend.
 - **ATL / Fatigue** — acute training load; short-term (7d) load.
 - **TSB / Form / Freshness** — training stress balance, `CTL − ATL`.

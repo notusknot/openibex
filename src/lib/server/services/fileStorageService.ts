@@ -25,6 +25,28 @@ export function streamRelativePath(activityId: string): string {
 	return path.posix.join('streams', `${activityId}.json.gz`);
 }
 
+export function importOriginalRelativePath(batchId: string, sha256: string, ext: string): string {
+	return path.posix.join('imports', batchId, 'originals', `${sha256}.${ext}`);
+}
+
+/** Store a bulk-import original under its batch. Like writeUploadFile, fails
+ * with EEXIST if the file is already there (callers decide whether a leftover
+ * identical file from a prior run is fine — by sha it always is). */
+export async function writeImportOriginal(input: {
+	batchId: string;
+	sha256: string;
+	ext: string;
+	bytes: Uint8Array;
+}): Promise<{ relativePath: string; sizeBytes: number }> {
+	const env = getEnv();
+	const relativePath = importOriginalRelativePath(input.batchId, input.sha256, input.ext);
+	const absolutePath = path.join(env.OPENIBEX_DATA_DIR, relativePath);
+
+	await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+	await fs.writeFile(absolutePath, input.bytes, { flag: 'wx' });
+	return { relativePath, sizeBytes: input.bytes.byteLength };
+}
+
 export async function writeUploadFile(input: {
 	userId: string;
 	sha256: string;

@@ -14,6 +14,45 @@ capability and the patch version for fixes; breaking changes may land in a minor
 
 ## [Unreleased]
 
+### Changed
+- **Dashboard page split into card components** — `dashboard/+page.svelte` was a 1358-line
+  monolith holding eight concerns and ~700 lines of inline CSS; every planned dashboard feature
+  (morning verdict, week intensity strip, race countdown) would have landed in it. It is now a
+  204-line composition of nine colocated card components (`PmcChart`, `KpiStrip`,
+  `WeeklyVolumeBars`, `ReadinessCard`, `MonotonyStrainCard`, `SportSplitCard`, `TimeInZonesCard`,
+  `PowerProfileCard`, `RecentActivitiesTable`), each owning its markup, scoped CSS, and local
+  hover/range state. The SVG coordinate math moved to a pure module (`chartGeometry.ts` — series
+  in, coordinates out) with its own unit tests; shared metric-tooltip copy lives in `statTips.ts`.
+  No visual or behavioral change (verified: mobile screenshots pixel-identical before/after,
+  desktop visually identical, hover/range interactions exercised, zero unused-CSS warnings).
+- **One durable coordination-lock module for sync and calendar** — the DB-backed lock + throttle +
+  exponential backoff + circuit breaker was implemented twice (`syncJobsRepository` and
+  `calendarSubscriptionsRepository`, the latter's comment admitting "mirrors releaseSyncJob
+  exactly"). The semantics — stale-lock reclaim, hard vs soft cool-down, ownership-guarded
+  release, breaker escalation — now live once in `src/lib/server/repositories/jobLock.ts`; both
+  repositories are thin column mappings over it, so a breaker fix lands once and a future
+  background-sync worker gets the same lock for free. Backoff constants renamed
+  `SYNC_*` → `JOB_*` (values unchanged). No behavior change; both existing lock test suites pass
+  unmodified in their assertions.
+- **One activity-ingest module behind all three ingestion paths** — the dedup + parse + store
+  pipeline that was copy-pasted (with drifting dedup order) across the Garmin sync, bulk import,
+  and single-upload services now lives in one place, `src/lib/server/services/ingestService.ts`
+  (`ingestFitActivity`). Canonical order: source-id → SHA-256 → parse → fingerprint → store →
+  atomic commit, with parsing before any disk write so failures are retryable. Two deliberate
+  strengthenings: **source-id dedup now matches across garmin-sync and garmin-export** (they share
+  Garmin's activity-id space, so an activity imported via one path dedupes against the other), and
+  **uploads now record full provenance** (`source: 'upload'`, `sourceFileSha256`, `sourceFilename`),
+  which also lets a re-upload dedupe against a previously synced copy of the same file. The
+  guarantee is asserted by a single canonical test suite (`ingestService.test.ts`); callers keep
+  only their own loops, cursors, and batch bookkeeping. Net behavior change is strictly *more*
+  dedup; nothing that deduped before stops deduping.
+
+### Fixed
+- **Successful single-FIT uploads now redirect to the new activity** — the upload action threw its
+  redirect inside a `try` whose generic `catch` swallowed it (SvelteKit redirects are thrown
+  objects, not `Error`s), so a successful import rendered "Import failed." while the activity was
+  actually created. The redirect now happens outside the `try`.
+
 ### Added
 - **Accurate HR zones from a threshold field test** — heart-rate zones are now anchored on your
   **lactate-threshold HR (LTHR)** using Friel's %LTHR bands (Z1 <85%, Z2 85–89%, Z3 90–94%,

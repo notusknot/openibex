@@ -11,7 +11,16 @@ import { STREAM_METRICS_VERSION } from '$lib/server/services/analytics/streamAgg
 const MOCK_START = new Date(2026, 0, 1, 7, 30);
 
 vi.mock('$lib/server/parsers/fit/fitParser', () => {
+	// ingestService imports FitNotAnActivityError from this module, so the mock
+	// must export it even though these tests never throw it.
+	class FitNotAnActivityError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = 'FitNotAnActivityError';
+		}
+	}
 	return {
+		FitNotAnActivityError,
 		parseFit: async () => ({
 			summary: {
 				sport: 'Run',
