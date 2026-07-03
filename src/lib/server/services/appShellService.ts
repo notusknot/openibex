@@ -1,5 +1,6 @@
 import {
 	countActivitiesForUser,
+	getLatestUndebriefedActivityForUser,
 	listActivitiesForUserInTimeRange
 } from '$lib/server/repositories/activitiesRepository';
 import { loadFor, type ThresholdPrefs } from '$lib/server/services/analytics/load';
@@ -77,4 +78,18 @@ export async function getRailSummary(
 	};
 	if (cacheable) railCache.set(key, { at: Date.now(), value });
 	return value;
+}
+
+export type DebriefNudge = { id: string; title: string };
+
+// "How did it go?" nudge: newest recent activity with no debrief yet. 48 h
+// window — the debrief habit is same-day; last week's workouts shouldn't nag.
+const NUDGE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+export async function getDebriefNudge(userId: string): Promise<DebriefNudge | null> {
+	const a = await getLatestUndebriefedActivityForUser({
+		userId,
+		since: new Date(Date.now() - NUDGE_WINDOW_MS)
+	});
+	return a ? { id: a.id, title: a.title } : null;
 }

@@ -63,7 +63,9 @@ export function intensityFactorFor(
 // Canonical "best available TSS" for a single activity. Priority:
 //   1. Stored activity.loadScore if set (Garmin precomputed)
 //   2. IF-based TSS = hours * IF^2 * 100 when we have power/HR + thresholds
-//   3. Sport-factor rough TSS from duration alone
+//   3. Session-RPE TSS = hours * rpe^2 (RPE/10 treated as IF) from the
+//      post-workout debrief — the subjective fallback for swim/strength
+//   4. Sport-factor rough TSS from duration alone
 export function loadFor(
 	activity: {
 		sport: Sport;
@@ -72,6 +74,7 @@ export function loadFor(
 		avgPowerW?: number | null;
 		normalizedPowerLikeW?: number | null;
 		avgHr?: number | null;
+		rpe?: number | null;
 	},
 	prefs: ThresholdPrefs | null = null
 ): number {
@@ -82,6 +85,11 @@ export function loadFor(
 		const ifn = intensityFactorFor(activity, prefs);
 		if (ifn !== null) {
 			return (activity.durationSec / 3600) * ifn * ifn * 100;
+		}
+		// A rated session is authoritative over the sport-factor guess — including
+		// rpe 0 ("barely an effort"), which correctly yields ~0 load.
+		if (activity.rpe !== null && activity.rpe !== undefined) {
+			return (activity.durationSec / 3600) * activity.rpe * activity.rpe;
 		}
 	}
 	return fallbackLoadScore({ sport: activity.sport, durationSec: activity.durationSec ?? null }) ?? 0;

@@ -4,6 +4,7 @@
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import StatCard from '$lib/components/ui/StatCard.svelte';
 	import ActivityChart from '$lib/components/activity/ActivityChart.svelte';
+	import DebriefCard from './DebriefCard.svelte';
 	import ElevationChart from '$lib/components/activity/ElevationChart.svelte';
 	import RouteMap from '$lib/components/activity/RouteMap.svelte';
 	import { formatPercent as pct } from '$lib/units';
@@ -66,6 +67,10 @@
 			<StatCard label={s.label} val={s.val} unit={s.unit} tip={STAT_TIPS[s.label] ?? ''} />
 		{/each}
 	</div>
+
+	<!-- Full-width, above the fold on both desktop and mobile: the debrief is the
+	     daily three-tap habit, so it must not live below the charts. -->
+	<DebriefCard activityId={activity.id} debrief={detail.debrief} />
 
 	<div class="grid">
 		<div class="left-col">

@@ -1,7 +1,13 @@
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { dayBoundsFromKey } from '$lib/server/time';
-import { activities, activityFiles, activityStreamMetrics, type Sport } from '$lib/server/db/schema';
+import {
+	activities,
+	activityFiles,
+	activityStreamMetrics,
+	type DebriefGrade,
+	type Sport
+} from '$lib/server/db/schema';
 import {
 	activityFileValues,
 	type CreateActivityFileInput
@@ -249,6 +255,42 @@ export async function updateActivityTitleForUser(input: {
 		.set({ title: input.title, updatedAt: new Date() })
 		.where(and(eq(activities.id, input.id), eq(activities.userId, input.userId)))
 		.run();
+}
+
+export async function updateActivityDebriefForUser(input: {
+	id: string;
+	userId: string;
+	rpe: number | null;
+	debriefGrade: DebriefGrade | null;
+}): Promise<void> {
+	const db = getDb();
+	db.update(activities)
+		.set({ rpe: input.rpe, debriefGrade: input.debriefGrade, updatedAt: new Date() })
+		.where(and(eq(activities.id, input.id), eq(activities.userId, input.userId)))
+		.run();
+}
+
+/** Newest recent activity still missing its post-workout debrief — drives the
+ * "how did it go?" nudge. Debriefed = has an RPE or a grade. */
+export async function getLatestUndebriefedActivityForUser(input: {
+	userId: string;
+	since: Date;
+}): Promise<DbActivity | undefined> {
+	const db = getDb();
+	return db
+		.select()
+		.from(activities)
+		.where(
+			and(
+				eq(activities.userId, input.userId),
+				gte(activities.startTime, input.since),
+				isNull(activities.rpe),
+				isNull(activities.debriefGrade)
+			)
+		)
+		.orderBy(desc(activities.startTime))
+		.limit(1)
+		.get();
 }
 
 export async function listActivitiesForUserOnDateAndSport(input: {

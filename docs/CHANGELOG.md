@@ -14,6 +14,18 @@ capability and the patch version for fixes; breaking changes may land in a minor
 
 ## [Unreleased]
 
+### Added
+- **Post-workout micro-debrief (RPE + grade + note)** — a "How did it go?" card at the top of the
+  activity detail page: session RPE (0–10), an A–F "did it do its job?" grade, and a one-line note,
+  saved in three taps (with a small confetti burst on save; skipped under reduced-motion). RPE and
+  grade live on the activity row; the note is the activity's row in the previously unused
+  `comments` table. RPE now feeds the shared load formula as a session-RPE fallback
+  (`hours × rpe²`, RPE/10 treated as IF) between IF-based TSS and the sport-factor guess — so
+  swim/strength sessions finally get a subjective, athlete-rated load (see
+  [DOMAIN.md](DOMAIN.md)). A dismissable "how did it go?" nudge (app layout, above the mobile tab
+  bar) points at the newest activity from the last 48 h that has no debrief yet; dismissal is
+  per-activity in localStorage, and saving the debrief clears it everywhere.
+
 ### Changed
 - **Dashboard page split into card components** — `dashboard/+page.svelte` was a 1358-line
   monolith holding eight concerns and ~700 lines of inline CSS; every planned dashboard feature

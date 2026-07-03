@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AppShell from '$lib/components/ui/AppShell.svelte';
+	import DebriefNudge from '$lib/components/ui/DebriefNudge.svelte';
 	import type { LayoutData } from './$types';
 
 	export let data: LayoutData;
@@ -10,6 +11,8 @@
 <AppShell user={data.user} railSummary={data.railSummary} garminSync={data.garminSync}>
 	<slot />
 </AppShell>
+
+<DebriefNudge nudge={data.debriefNudge} />
 
 <style>
 	.skip {

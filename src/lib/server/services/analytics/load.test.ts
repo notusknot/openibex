@@ -69,6 +69,25 @@ describe('loadFor', () => {
 		expect(swim).toBeCloseTo(65, 0);
 	});
 
+	it('uses session RPE when no loadScore/IF exists (swim/strength)', () => {
+		// 1h swim at RPE 7 → 1 × 7² = 49 TSS (RPE/10 treated as IF)
+		expect(loadFor({ sport: 'Swim', durationSec: 3600, loadScore: null, rpe: 7 }, null)).toBeCloseTo(49, 0);
+		// RPE 0 is a rating, not "unrated": ~0 load, not the sport-factor guess
+		expect(loadFor({ sport: 'Strength', durationSec: 3600, loadScore: null, rpe: 0 }, null)).toBe(0);
+	});
+
+	it('prefers measured signals over RPE', () => {
+		// Stored loadScore wins
+		expect(loadFor({ sport: 'Swim', durationSec: 3600, loadScore: 80, rpe: 3 }, null)).toBe(80);
+		// IF (power) wins over RPE on the bike
+		expect(
+			loadFor(
+				{ sport: 'Bike', durationSec: 3600, avgPowerW: 250, loadScore: null, rpe: 2 },
+				{ ftpWatts: 250, thresholdHrBpm: null }
+			)
+		).toBeCloseTo(100, 0);
+	});
+
 	it('matches fallbackLoadScore for sport-factor case', () => {
 		const a = { sport: 'Bike' as const, durationSec: 3600, loadScore: null };
 		expect(loadFor(a, null)).toBeCloseTo(fallbackLoadScore(a)!, 0);

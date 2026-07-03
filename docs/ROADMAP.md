@@ -47,11 +47,6 @@ the team calendar can't — *how hard should I go today, given the race I'm buil
   race debrief** prompt (deliberately not race-day — emotions confuse the analysis): what worked,
   what didn't, pacing notes. The app exists to help train for races and currently has no concept of
   one.
-- **Post-workout micro-debrief (RPE + grade + note)** — three taps on the activity detail page:
-  session RPE (0–10), an A–F "did it do its job?" grade, one line of feeling. The unused `comments`
-  table already fits. RPE doubles as a load fallback for swim/strength where no IF exists, and the
-  accumulated grades/notes are the data that later personalizes the morning verdict (which warning
-  signs actually precede *your* bad days). Friel's diary-not-log, in its minimum form.
 - **Week intensity strip + density guardrails** — zero new input: classify each of the last 7 days
   hard/easy from data already stored (IF, time-in-zone, load) and render a compact strip on the
   dashboard. Warn on Friel's rules: more than 2 hard days in a week (the 5-2 pattern), hard days
