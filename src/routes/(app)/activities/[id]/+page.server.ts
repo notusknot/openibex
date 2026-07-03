@@ -1,7 +1,11 @@
 import type { Actions, PageServerLoad } from './$types';
-import { error, redirect } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 
-import { getActivityDetail, deleteActivity } from '$lib/server/services/activityDetailService';
+import {
+	getActivityDetail,
+	deleteActivity,
+	saveActivityDebrief
+} from '$lib/server/services/activityDetailService';
 import { unlinkActivity } from '$lib/server/services/workoutMatchingService';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
@@ -22,6 +26,21 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 };
 
 export const actions: Actions = {
+	debrief: async ({ locals, params, request }) => {
+		if (!locals.user) throw redirect(303, '/login');
+		const form = await request.formData();
+		const rpeRaw = String(form.get('rpe') ?? '');
+		const gradeRaw = String(form.get('grade') ?? '');
+		const ok = await saveActivityDebrief({
+			userId: locals.user.id,
+			activityId: params.id,
+			rpe: rpeRaw === '' ? null : Number(rpeRaw),
+			grade: gradeRaw === '' ? null : gradeRaw,
+			note: String(form.get('note') ?? '')
+		});
+		if (!ok) return fail(400, { debriefError: true });
+		return { debriefSaved: true };
+	},
 	unlink: async ({ locals, params }) => {
 		if (!locals.user) throw redirect(303, '/login');
 		await unlinkActivity(locals.user.id, params.id);

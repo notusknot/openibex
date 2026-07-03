@@ -14,7 +14,11 @@ Per-activity load is "best available TSS", chosen in priority order (`analytics/
 
 1. **Stored `loadScore`** if present and > 0 (e.g. Garmin-precomputed training load).
 2. **IF-based TSS** when we can compute an intensity factor: `hours × IF² × 100`.
-3. **Sport-factor fallback** from duration alone: `hours × sportFactor × 100`.
+3. **Session-RPE TSS** when the post-workout debrief recorded an RPE:
+   `hours × rpe² ` (RPE/10 treated as IF, so a 1-hour RPE-10 session = 100 TSS). The
+   subjective fallback for swim/strength, where no IF exists. An RPE of 0 is a rating
+   ("barely an effort") and yields ~0 load — it does not fall through to the sport factor.
+4. **Sport-factor fallback** from duration alone: `hours × sportFactor × 100`.
 
 where `hours = durationSec / 3600`.
 

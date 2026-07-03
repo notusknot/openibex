@@ -5,6 +5,7 @@
 	import StatCard from '$lib/components/ui/StatCard.svelte';
 	import BackLink from '$lib/components/ui/BackLink.svelte';
 	import ActivityDetailView from './ActivityDetailView.svelte';
+	import DebriefCard from './DebriefCard.svelte';
 	import { swr, PENDING, FAILED } from '$lib/swrCache';
 
 	export let data: PageData;
@@ -56,6 +57,12 @@
 				<StatCard {label} loading />
 			{/each}
 		</div>
+
+		<!-- The debrief card is static chrome (chips, note input) that needs nothing
+		     from the streamed detail, so the REAL card renders here — identical
+		     geometry, no reflow — and is already usable while the detail loads. Saved
+		     values fill in when the detail resolves (remounts with server state). -->
+		<DebriefCard activityId={$page.params.id ?? ''} debrief={{ rpe: null, grade: null, note: '' }} />
 
 		<!-- Chart chrome (card + title text) is static, so it renders as real text;
 		     the plot box is sized to the chart's real SVG height (208 / 96) and the

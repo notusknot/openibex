@@ -65,6 +65,9 @@ export const sessions = sqliteTable(
 export const sports = ['Bike', 'Run', 'Swim', 'Strength', 'Other'] as const;
 export type Sport = (typeof sports)[number];
 
+export const debriefGrades = ['A', 'B', 'C', 'D', 'F'] as const;
+export type DebriefGrade = (typeof debriefGrades)[number];
+
 export const plannedWorkouts = sqliteTable(
 	'planned_workouts',
 	{
@@ -180,6 +183,11 @@ export const activities = sqliteTable(
 	avgCadence: real('avg_cadence'),
 	calories: real('calories'),
 	loadScore: real('load_score'),
+	// Post-workout micro-debrief (Friel's diary-not-log): session RPE 0–10 and an
+	// A–F "did it do its job?" grade. RPE also feeds the load fallback when no
+	// IF/loadScore exists (swim/strength). The one-line note lives in `comments`.
+	rpe: integer('rpe'),
+	debriefGrade: text('debrief_grade', { enum: debriefGrades }),
 	streamPath: text('stream_path'),
 	parserVersion: text('parser_version'),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })

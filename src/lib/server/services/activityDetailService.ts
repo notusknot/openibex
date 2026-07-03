@@ -1,8 +1,14 @@
 import {
 	getActivityByIdForUser,
 	deleteActivityForUser,
+	updateActivityDebriefForUser,
 	type DbActivity
 } from '$lib/server/repositories/activitiesRepository';
+import {
+	deleteCommentForTarget,
+	getCommentForTarget,
+	upsertCommentForTarget
+} from '$lib/server/repositories/commentsRepository';
 import {
 	getActivityFileByIdForUser,
 	deleteActivityFileForUser,
@@ -21,7 +27,7 @@ import {
 	loadFor as sharedLoadFor,
 	type ThresholdPrefs
 } from '$lib/server/services/analytics/load';
-import type { Sport } from '$lib/server/db/schema';
+import { debriefGrades, type DebriefGrade, type Sport } from '$lib/server/db/schema';
 import { SPORT_COLOR_VAR, SPORT_TAG } from '$lib/sport';
 import type { ActivityTrack, TrackPoint } from '$lib/track';
 import { HR_ZONE_COLORS, HR_ZONE_NAMES, hrZoneIndex } from '$lib/zones';
@@ -67,8 +73,15 @@ export type ActivityShaped = {
 	distanceM: number | null;
 };
 
+export type ActivityDebrief = {
+	rpe: number | null;
+	grade: DebriefGrade | null;
+	note: string;
+};
+
 export type ActivityDetailData = {
 	activity: ActivityShaped;
+	debrief: ActivityDebrief;
 	file: { id: string; originalFilename: string; sha256: string; sizeBytes: number } | null;
 	link: {
 		matchType: string;
@@ -225,12 +238,13 @@ export async function getActivityDetail(input: {
 	// app default when untested, so every view agrees.
 	const lthr = prefs?.thresholdHrBpm && prefs.thresholdHrBpm > 0 ? prefs.thresholdHrBpm : DEFAULT_THR_HR;
 
-	const [fileRow, link, streamRaw] = await Promise.all([
+	const [fileRow, link, streamRaw, noteComment] = await Promise.all([
 		activity.activityFileId
 			? getActivityFileByIdForUser(activity.activityFileId, input.userId)
 			: Promise.resolve<DbActivityFile | undefined>(undefined),
 		getWorkoutLinkForActivity(input.userId, activity.id),
-		readStreamBlob(activity.id)
+		readStreamBlob(activity.id),
+		getCommentForTarget({ userId: input.userId, targetType: 'activity', targetId: activity.id })
 	]);
 
 	const planned = link
@@ -489,6 +503,11 @@ export async function getActivityDetail(input: {
 
 	return {
 		activity: shaped,
+		debrief: {
+			rpe: activity.rpe ?? null,
+			grade: activity.debriefGrade ?? null,
+			note: noteComment?.body ?? ''
+		},
 		file,
 		link: linkOut,
 		planned: plannedOut,
@@ -498,6 +517,41 @@ export async function getActivityDetail(input: {
 		hrZones,
 		peaks
 	};
+}
+
+export const DEBRIEF_NOTE_MAX = 280;
+
+/**
+ * Save the post-workout micro-debrief: RPE (0–10) + grade (A–F) on the
+ * activity row, the one-line note as the activity's comment (deleted when
+ * cleared). Returns false when the activity doesn't exist / isn't the user's,
+ * or the input is out of range.
+ */
+export async function saveActivityDebrief(input: {
+	userId: string;
+	activityId: string;
+	rpe: number | null;
+	grade: string | null;
+	note: string;
+}): Promise<boolean> {
+	const { rpe, grade } = input;
+	if (rpe !== null && (!Number.isInteger(rpe) || rpe < 0 || rpe > 10)) return false;
+	if (grade !== null && !debriefGrades.includes(grade as DebriefGrade)) return false;
+	const note = input.note.trim().slice(0, DEBRIEF_NOTE_MAX);
+
+	const activity = await getActivityByIdForUser(input.activityId, input.userId);
+	if (!activity) return false;
+
+	await updateActivityDebriefForUser({
+		id: activity.id,
+		userId: input.userId,
+		rpe,
+		debriefGrade: (grade as DebriefGrade | null) ?? null
+	});
+	const target = { userId: input.userId, targetType: 'activity' as const, targetId: activity.id };
+	if (note) await upsertCommentForTarget({ ...target, body: note });
+	else await deleteCommentForTarget(target);
+	return true;
 }
 
 /** Resolve an activity file the user owns, for the download endpoint — so the
