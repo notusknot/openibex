@@ -48,6 +48,10 @@ registerShutdownHandlers();
 
 const PUBLIC_PREFIXES = [
 	'/api/health',
+	// Read-only HTTP API for external dashboards. Public at the hook level (no
+	// login redirect); each endpoint enforces its own bearer token — see
+	// src/lib/server/api/auth.ts.
+	'/api/v1',
 	'/_app',
 	'/favicon',
 	'/robots.txt',

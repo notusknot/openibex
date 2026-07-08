@@ -15,6 +15,13 @@ capability and the patch version for fixes; breaking changes may land in a minor
 ## [Unreleased]
 
 ### Added
+- **Read-only HTTP API (`/api/v1`)** — a small JSON API for external dashboards (e.g. a homelab
+  dashboard) to pull training data. Four endpoints: `summary` (fitness/fatigue/form KPIs), `series`
+  (84-day CTL/ATL/TSB), `activities` (recent, `?limit=`), and `planned` (upcoming, `?days=`). Each
+  is a thin `GET` calling existing services, so adding a resource later is one new file. Disabled by
+  default: set `API_TOKEN` to enable, callers authenticate with `Authorization: Bearer <token>`
+  (timing-safe compare, fail-closed → `503` when unset, `401` on bad token). Serves the first user,
+  or `API_USER_EMAIL` if set. Server-side/LAN use — no rate limiting or CORS. See README → HTTP API.
 - **Post-workout micro-debrief (RPE + grade + note)** — a "How did it go?" card at the top of the
   activity detail page: session RPE (0–10), an A–F "did it do its job?" grade, and a one-line note,
   saved in three taps (with a small confetti burst on save; skipped under reduced-motion). RPE and

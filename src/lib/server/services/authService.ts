@@ -191,7 +191,7 @@ export async function updateProfileDisplayName(userId: string, displayName: stri
 	await updateDisplayName(userId, trimmed.length > 0 ? trimmed : null);
 }
 
-function toAuthUserPrefs(user: {
+export function toAuthUserPrefs(user: {
 	ftpWatts: number | null;
 	thresholdHrBpm: number | null;
 	maxHrBpm: number | null;
