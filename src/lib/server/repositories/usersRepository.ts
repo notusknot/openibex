@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '$lib/server/db/client';
 import { users, type Units, type UserRole, type WeekStart } from '$lib/server/db/schema';
 
@@ -19,6 +19,13 @@ export async function getUserByEmail(email: string): Promise<DbUser | undefined>
 export async function getUserById(id: string): Promise<DbUser | undefined> {
 	const db = getDb();
 	return db.select().from(users).where(eq(users.id, id)).get();
+}
+
+// The oldest user (first registered — the admin on a fresh install). Used to
+// pick which account the read-only HTTP API serves when API_USER_EMAIL is unset.
+export async function getFirstUser(): Promise<DbUser | undefined> {
+	const db = getDb();
+	return db.select().from(users).orderBy(asc(users.createdAt)).limit(1).get();
 }
 
 export async function createUser(input: {

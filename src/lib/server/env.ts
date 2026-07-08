@@ -47,6 +47,13 @@ export type OpenIbexEnv = {
 	CALENDAR_MAX_FEED_BYTES: number; // reject feeds larger than this
 	CALENDAR_FETCH_TIMEOUT_MS: number; // abort a feed fetch after this long
 	CALENDAR_MAX_OCCURRENCES: number; // cap expanded occurrences per feed per poll
+	// Read-only HTTP API (src/routes/api/v1). Both optional. When API_TOKEN is
+	// UNSET the API is disabled (endpoints return 503) — fail closed. When set,
+	// callers authenticate with `Authorization: Bearer <API_TOKEN>`.
+	// API_USER_EMAIL selects which user's data the API serves; unset → the first
+	// (oldest) user, which is the right default for a single-user homelab.
+	API_TOKEN?: string;
+	API_USER_EMAIL?: string;
 };
 
 function readEnv(name: string): string | undefined {
@@ -108,7 +115,9 @@ export function getEnv(): OpenIbexEnv {
 		CALENDAR_SYNC_PAST_GRACE_DAYS: numEnv('CALENDAR_SYNC_PAST_GRACE_DAYS', 1),
 		CALENDAR_MAX_FEED_BYTES: numEnv('CALENDAR_MAX_FEED_BYTES', 5_000_000),
 		CALENDAR_FETCH_TIMEOUT_MS: numEnv('CALENDAR_FETCH_TIMEOUT_MS', 15_000),
-		CALENDAR_MAX_OCCURRENCES: numEnv('CALENDAR_MAX_OCCURRENCES', 500)
+		CALENDAR_MAX_OCCURRENCES: numEnv('CALENDAR_MAX_OCCURRENCES', 500),
+		API_TOKEN: readEnv('API_TOKEN'),
+		API_USER_EMAIL: readEnv('API_USER_EMAIL')
 	};
 }
 

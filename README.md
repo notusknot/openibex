@@ -61,8 +61,42 @@ All configuration is via environment variables in `.env`:
 | `SESSION_TTL_DAYS` | `30` | Session lifetime. |
 | `OPEN_REGISTRATION` | `false` | Allow registration beyond the first user. |
 | `SYNC_ENCRYPTION_KEY` | — | Required only for Garmin Connect sync (see below). |
+| `API_TOKEN` | — | Enables the read-only [HTTP API](#http-api). Unset = API disabled. |
+| `API_USER_EMAIL` | first user | Which account the API serves (only matters on multi-user installs). |
 | `PUID` | `1000` | Host uid that owns `./data`; the app runs as it and the entrypoint chowns `/data` to match. |
 | `PGID` | `1000` | Host gid counterpart to `PUID`. |
+
+## HTTP API
+
+A small read-only JSON API for external dashboards (e.g. a homelab dashboard). It's **disabled by
+default** — set `API_TOKEN` in `.env` to turn it on:
+
+```bash
+openssl rand -base64 32     # paste into .env as API_TOKEN=...
+```
+
+Callers authenticate with that token as a bearer header. The API serves a single account: the
+first-registered user, or `API_USER_EMAIL` if you set one.
+
+```bash
+TOKEN=your-api-token
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/summary
+```
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/v1/summary` | Current training load — fitness (CTL), fatigue (ATL), form (TSB), week TSS, readiness, monotony, strain. |
+| `GET /api/v1/series` | The 84-day CTL/ATL/TSB time-series, for charting. |
+| `GET /api/v1/activities?limit=N` | Recent activities (default 20, max 100) plus a summary total. |
+| `GET /api/v1/planned?days=N` | Upcoming planned workouts (default 14 days, max 90). |
+
+A request with no/invalid token gets `401`; if `API_TOKEN` is unset the endpoints return `503`.
+Adding an endpoint later is one new file under `src/routes/api/v1/`.
+
+> Meant for **server-side** callers on a trusted LAN/Tailscale network — there is no rate limiting or
+> CORS, and the token grants read access to everything above. Don't expose it to the public internet
+> or call it from browser JavaScript (which would leak the token). On NixOS, provide `API_TOKEN` via
+> `services.openibex.environmentFile` (see [docs/nixos.md](docs/nixos.md)) so it stays out of the Nix store.
 
 ## Deploy on NixOS (flake module)
 
