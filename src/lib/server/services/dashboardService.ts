@@ -80,6 +80,12 @@ export type DashboardWeek = {
 	bike: number;
 	run: number;
 	total: number;
+	hours: {
+		swim: number;
+		bike: number;
+		run: number;
+		total: number;
+	};
 	label: string;
 };
 
@@ -431,6 +437,12 @@ export async function getDashboardData(
 		run: new Array<number>(days).fill(0),
 		other: new Array<number>(days).fill(0)
 	};
+	const dailyHoursBySport: Record<'swim' | 'bike' | 'run' | 'other', number[]> = {
+		swim: new Array<number>(days).fill(0),
+		bike: new Array<number>(days).fill(0),
+		run: new Array<number>(days).fill(0),
+		other: new Array<number>(days).fill(0)
+	};
 
 	for (const a of windowActivities) {
 		const idx = localDayIndex(new Date(a.startTime), windowStart);
@@ -439,6 +451,7 @@ export async function getDashboardData(
 		dailyTss[idx]! += load;
 		const disp = SPORT_DISPLAY[a.sport as Sport];
 		dailyBySport[disp]![idx]! += load;
+		dailyHoursBySport[disp]![idx]! += Math.max(0, a.durationSec ?? 0) / 3600;
 	}
 
 	const aC = 1 - Math.exp(-1 / CTL_TC);
@@ -508,11 +521,17 @@ export async function getDashboardData(
 		let swim = 0;
 		let bike = 0;
 		let run = 0;
+		let swimHours = 0;
+		let bikeHours = 0;
+		let runHours = 0;
 		for (let d = 0; d < 7; d++) {
 			const idx = w * 7 + d;
 			swim += dailyBySport.swim[idx]!;
 			bike += dailyBySport.bike[idx]!;
 			run += dailyBySport.run[idx]!;
+			swimHours += dailyHoursBySport.swim[idx]!;
+			bikeHours += dailyHoursBySport.bike[idx]!;
+			runHours += dailyHoursBySport.run[idx]!;
 		}
 		const dt = new Date(windowStart.getTime() + w * 7 * DAY_MS);
 		weeks.push({
@@ -521,6 +540,12 @@ export async function getDashboardData(
 			bike: Math.round(bike),
 			run: Math.round(run),
 			total: Math.round(swim + bike + run),
+			hours: {
+				swim: swimHours,
+				bike: bikeHours,
+				run: runHours,
+				total: swimHours + bikeHours + runHours
+			},
 			label: `${dt.getMonth() + 1}/${dt.getDate()}`
 		});
 	}

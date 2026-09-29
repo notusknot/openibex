@@ -4,9 +4,16 @@
 
 	export let weeks: PageData['dashboard']['weeks'];
 
+	type Metric = 'time' | 'tss';
+	let metric: Metric = 'time';
 	let barHoverIdx: number | null = null;
 
-	$: bars = computeBarGeo(weeks);
+	$: displayedWeeks = weeks.map((week) =>
+		metric === 'time'
+			? { label: week.label, ...week.hours }
+			: { label: week.label, total: week.total, swim: week.swim, bike: week.bike, run: week.run }
+	);
+	$: bars = computeBarGeo(displayedWeeks);
 	$: barHover = (() => {
 		const idx = barHoverIdx;
 		if (idx === null) return null;
@@ -21,6 +28,16 @@
 			run: b.run
 		};
 	})();
+
+	function selectMetric(next: Metric) {
+		metric = next;
+		barHoverIdx = null;
+	}
+
+	function formatValue(value: number) {
+		if (metric === 'tss') return String(value);
+		return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)} h`;
+	}
 
 	function onBarMove(e: MouseEvent) {
 		let el = e.target as HTMLElement | null;
@@ -37,10 +54,28 @@
 		<div class="card-title">
 			Weekly volume <span class="card-title-sub">· by sport</span>
 		</div>
-		<div class="mini-legend">
-			<span class="legend-item-sm"><span class="legend-swatch-sm" style="background: var(--swim)"></span>Swim</span>
-			<span class="legend-item-sm"><span class="legend-swatch-sm" style="background: var(--bike)"></span>Bike</span>
-			<span class="legend-item-sm"><span class="legend-swatch-sm" style="background: var(--run)"></span>Run</span>
+		<div class="card-controls">
+			<div class="metric-toggle" role="group" aria-label="Weekly volume metric">
+				<button
+					type="button"
+					class="metric-chip"
+					class:active={metric === 'time'}
+					aria-pressed={metric === 'time'}
+					on:click={() => selectMetric('time')}>Time</button
+				>
+				<button
+					type="button"
+					class="metric-chip"
+					class:active={metric === 'tss'}
+					aria-pressed={metric === 'tss'}
+					on:click={() => selectMetric('tss')}>TSS</button
+				>
+			</div>
+			<div class="mini-legend">
+				<span class="legend-item-sm"><span class="legend-swatch-sm" style="background: var(--swim)"></span>Swim</span>
+				<span class="legend-item-sm"><span class="legend-swatch-sm" style="background: var(--bike)"></span>Bike</span>
+				<span class="legend-item-sm"><span class="legend-swatch-sm" style="background: var(--run)"></span>Run</span>
+			</div>
 		</div>
 	</div>
 	<div class="bars-wrap">
@@ -52,7 +87,7 @@
 			on:mousemove={onBarMove}
 			on:mouseleave={() => (barHoverIdx = null)}
 			role="img"
-			aria-label="Weekly training volume by sport"
+			aria-label={metric === 'time' ? 'Weekly activity time by sport' : 'Weekly TSS by sport'}
 		>
 			<line x1={BAR_PAD_L} y1={BAR_BASE_Y} x2={BAR_W - BAR_PAD_L} y2={BAR_BASE_Y} stroke="var(--grid)" stroke-width="1" />
 			{#each bars as b}
@@ -70,16 +105,16 @@
 		{#if barHover}
 			<div class="tip bar-tip" style="left: {barHover.leftPct}">
 				<div class="tip-head">
-					<span class="tip-fit">{barHover.label}</span><span class="oi-mono">{barHover.total}</span>
+					<span class="tip-fit">{barHover.label}</span><span class="oi-mono">{formatValue(barHover.total)}</span>
 				</div>
 				<div class="tip-row">
-					<span class="tip-swim">Swim</span><span class="oi-mono">{barHover.swim}</span>
+					<span class="tip-swim">Swim</span><span class="oi-mono">{formatValue(barHover.swim)}</span>
 				</div>
 				<div class="tip-row">
-					<span class="tip-fat">Bike</span><span class="oi-mono">{barHover.bike}</span>
+					<span class="tip-fat">Bike</span><span class="oi-mono">{formatValue(barHover.bike)}</span>
 				</div>
 				<div class="tip-row">
-					<span class="tip-fit">Run</span><span class="oi-mono">{barHover.run}</span>
+					<span class="tip-fit">Run</span><span class="oi-mono">{formatValue(barHover.run)}</span>
 				</div>
 			</div>
 		{/if}
@@ -112,6 +147,31 @@
 		font-weight: 500;
 		color: var(--faint);
 		font-size: 11px;
+	}
+	.card-controls {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.metric-toggle {
+		display: flex;
+		padding: 2px;
+		background: var(--btn);
+		border: 1px solid var(--line);
+		border-radius: 7px;
+	}
+	.metric-chip {
+		border: 0;
+		border-radius: 5px;
+		padding: 3px 7px;
+		background: transparent;
+		color: var(--muted);
+		font: 600 9px 'Archivo', system-ui, sans-serif;
+		cursor: pointer;
+	}
+	.metric-chip.active {
+		background: var(--green);
+		color: #fff;
 	}
 	.mini-legend {
 		display: flex;
@@ -185,6 +245,10 @@
 		.card-head {
 			flex-wrap: wrap;
 			gap: 8px;
+		}
+		.card-controls {
+			width: 100%;
+			justify-content: space-between;
 		}
 	}
 </style>

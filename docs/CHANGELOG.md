@@ -34,6 +34,9 @@ capability and the patch version for fixes; breaking changes may land in a minor
   per-activity in localStorage, and saving the debrief clears it everywhere.
 
 ### Changed
+- **Weekly dashboard volume defaults to activity time** — the by-sport stacked bars now show hours
+  per week by default, with an accessible Time/TSS chip toggle that preserves the existing TSS
+  chart as an alternate view.
 - **Dashboard page split into card components** — `dashboard/+page.svelte` was a 1358-line
   monolith holding eight concerns and ~700 lines of inline CSS; every planned dashboard feature
   (morning verdict, week intensity strip, race countdown) would have landed in it. It is now a
