@@ -178,6 +178,32 @@ describe('getDashboardData EWMA pipeline', () => {
 		expect(Math.round(last.ctl)).toBe(1);
 		expect(Math.round(last.atl)).toBe(8);
 	});
+
+	it('provides weekly duration by sport alongside the unchanged TSS totals', async () => {
+		await Promise.all([
+			createActivity({
+				id: 'swim', userId, activityFileId: null, sport: 'Swim', title: 'Swim',
+				startTime: new Date('2026-06-15T06:00:00'), durationSec: 1800, loadScore: 30
+			}),
+			createActivity({
+				id: 'bike', userId, activityFileId: null, sport: 'Bike', title: 'Bike',
+				startTime: new Date('2026-06-15T08:00:00'), durationSec: 7200, loadScore: 100
+			}),
+			createActivity({
+				id: 'run', userId, activityFileId: null, sport: 'Run', title: 'Run',
+				startTime: new Date('2026-06-15T11:00:00'), durationSec: 3600, loadScore: 70
+			}),
+			createActivity({
+				id: 'strength', userId, activityFileId: null, sport: 'Strength', title: 'Strength',
+				startTime: new Date('2026-06-15T13:00:00'), durationSec: 2700, loadScore: 40
+			})
+		]);
+
+		const d = await getDashboardData(userId, { now: NOW, prefs: null });
+		const week = d.weeks.at(-1)!;
+		expect(week).toMatchObject({ swim: 30, bike: 100, run: 70, total: 200 });
+		expect(week.hours).toEqual({ swim: 0.5, bike: 2, run: 1, total: 3.5 });
+	});
 });
 
 describe('getDashboardData stream cards (time-in-zone + power)', () => {
